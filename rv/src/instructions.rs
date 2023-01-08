@@ -85,14 +85,14 @@ pub struct JType {
 impl JType {
     pub fn parse(instr: u32) -> Self {
         let imm: u32 =
-            // instr[31] -> imm[20]
-            ((instr & (1 << 31)) >> 31) << 20 |
+            // instr[31] -> imm[20], sign extended
+            (((instr as i32 >> 31) as u32) << 20) |
             // instr[30:21] -> imm [10:1]
-            ((instr & ((1 << 31) - 1)) >> 21) << 1 |
+            (((instr & ((1 << 31) - 1)) >> 21) << 1) |
             // instr[20] -> imm[11]
-            ((instr & ((1 << 21) - 1)) >> 20) << 11 |
+            (((instr & ((1 << 21) - 1)) >> 20) << 11) |
             // instr[19:12] -> imm [19:12]
-            ((instr & ((1 << 20) - 1)) >> 12) << 12;
+            (((instr & ((1 << 20) - 1)) >> 12) << 12);
 
         // instr[11:7]
         let rd: u8 =
@@ -114,7 +114,7 @@ pub struct IType {
 }
 
 impl IType {
-    pub fn parse(instr: u32) -> Self{
+    pub fn parse(instr: u32) -> Self {
         // instr[31:20] -> imm[11:0], sign extended
         let imm =
             ((instr as i32) >> 20) as u32;
