@@ -5,9 +5,26 @@
 pub struct Reg(pub u8);
 
 impl Reg {
-    /// get the abi name of the register
+    /// Get the xN name of the register
+    pub fn name(self) -> &'static str {
+        const NAMES: [&str; 32] = [
+            "x0", "x1", "x2", "x3", "x4",
+            "x5", "x6", "x7", "x8", "x9",
+            "x10", "x11", "x12", "x13", "x14",
+            "x15", "x16", "x17", "x18", "x19",
+            "x20", "x21", "x22", "x23", "x24",
+            "x25", "x26", "x27", "x28", "x29",
+            "x30", "x31",
+        ];
+        NAMES[self.0 as usize]
+    }
+
+    /// Get the abi name of the register
+    ///
+    /// As in Chapter 25 of the spec.
     pub fn abi_name(self) -> &'static str {
         const NAMES: [&str; 32] = [
+            // zero register
             "zero",
             // return address
             "ra",
@@ -19,13 +36,15 @@ impl Reg {
             "tp",
             // temporaries
             "t0", "t1", "t2",
-            // frame pointer, alternative name s0
-            "fp",
+            // saved register/frame pointer, alternative name "fp"
+            "s0",
             // saved register
             "s1",
-            // function args (all)/return values (a0, a1)
-            "a0", "a1", "a2", "a3", "a4", "a5", "a6", "a7",
-            // saved register
+            // function arguments/return values
+            "a0", "a1",
+            // function arguments
+            "a2", "a3", "a4", "a5", "a6", "a7",
+            // saved registers
             "s2", "s3", "s4", "s5", "s6", "s7", "s8", "s9", "s10", "s11",
             // temporary registers
             "t3", "t4", "t5", "t6",
@@ -49,6 +68,7 @@ impl UType {
         // instr[11:7]
         let rd = ((instr & ((1 << 12) - 1)) >> 7) as u8;
         let rd = Reg(rd);
+
         UType {
             imm,
             rd,

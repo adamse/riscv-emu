@@ -82,7 +82,7 @@ pub fn disassemble(instr: u32) {
                         typ.imm);
                 },
                 funct3 => {
-                    panic!("Uknown BRANCH: {funct3:#03b}");
+                    panic!("Unknown BRANCH: {funct3:#03b}");
                 },
             };
         },
