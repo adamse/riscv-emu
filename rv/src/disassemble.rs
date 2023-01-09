@@ -26,7 +26,7 @@ pub fn disassemble_one(addr: u32, instr: u32) {
         // JAL
         0b1101111 => {
             let typ = JType::parse(instr);
-            println!("jal {}, rel={:#08x}, abs={:#08x}",
+            println!("jal {}, rel={}, abs={:#08x}",
                 typ.rd.abi_name(),
                 typ.imm,
                 (addr as i32 + typ.imm as i32) as u32);
@@ -51,7 +51,7 @@ pub fn disassemble_one(addr: u32, instr: u32) {
             match typ.funct3 {
                 // BEQ
                 0b000 => {
-                    println!("beq {}, {}, rel={:#08x}, abs={:#08x}",
+                    println!("beq {}, {}, rel={}, abs={:#08x}",
                         typ.rs1.abi_name(),
                         typ.rs2.abi_name(),
                         typ.imm,
@@ -59,7 +59,7 @@ pub fn disassemble_one(addr: u32, instr: u32) {
                 },
                 // BNE
                 0b001 => {
-                    println!("bne {}, {}, rel={:#08x}, abs={:#08x}",
+                    println!("bne {}, {}, rel={}, abs={:#08x}",
                         typ.rs1.abi_name(),
                         typ.rs2.abi_name(),
                         typ.imm,
@@ -67,7 +67,7 @@ pub fn disassemble_one(addr: u32, instr: u32) {
                 },
                 // BLT
                 0b100 => {
-                    println!("blt {}, {}, rel={:#08x}, abs={:#08x}",
+                    println!("blt {}, {}, rel={}, abs={:#08x}",
                         typ.rs1.abi_name(),
                         typ.rs2.abi_name(),
                         typ.imm,
@@ -75,7 +75,7 @@ pub fn disassemble_one(addr: u32, instr: u32) {
                 },
                 // BGE
                 0b101 => {
-                    println!("bge {}, {}, rel={:#08x}, abs={:#08x}",
+                    println!("bge {}, {}, rel={}, abs={:#08x}",
                         typ.rs1.abi_name(),
                         typ.rs2.abi_name(),
                         typ.imm,
@@ -83,7 +83,7 @@ pub fn disassemble_one(addr: u32, instr: u32) {
                 },
                 // BLTU
                 0b110 => {
-                    println!("bltu {}, {}, rel={:#08x}, abs={:#08x}",
+                    println!("bltu {}, {}, rel={}, abs={:#08x}",
                         typ.rs1.abi_name(),
                         typ.rs2.abi_name(),
                         typ.imm,
@@ -91,7 +91,7 @@ pub fn disassemble_one(addr: u32, instr: u32) {
                 },
                 // BGEU
                 0b111 => {
-                    println!("bgeu {}, {}, rel={:#08x}, abs={:#08x}",
+                    println!("bgeu {}, {}, rel={}, abs={:#08x}",
                         typ.rs1.abi_name(),
                         typ.rs2.abi_name(),
                         typ.imm,
@@ -109,35 +109,35 @@ pub fn disassemble_one(addr: u32, instr: u32) {
             match typ.funct3 {
                 // LB
                 0b000 => {
-                    println!("lb {}, {}, rel={:}",
+                    println!("lb {}, {}, rel={}",
                         typ.rd.abi_name(),
                         typ.rs1.abi_name(),
                         typ.imm as i32);
                 },
                 // LH
                 0b001 => {
-                    println!("lh {}, {}, rel={:}",
+                    println!("lh {}, {}, rel={}",
                         typ.rd.abi_name(),
                         typ.rs1.abi_name(),
                         typ.imm as i32);
                 },
                 // LW
                 0b010 => {
-                    println!("lw {}, {}, rel={:}",
+                    println!("lw {}, {}, rel={}",
                         typ.rd.abi_name(),
                         typ.rs1.abi_name(),
                         typ.imm as i32);
                 },
                 // LBU
                 0b100 => {
-                    println!("lbu {}, {}, rel={:}",
+                    println!("lbu {}, {}, rel={}",
                         typ.rd.abi_name(),
                         typ.rs1.abi_name(),
                         typ.imm as i32);
                 },
                 // LHU
                 0b101 => {
-                    println!("lhu {}, {}, rel={:}",
+                    println!("lhu {}, {}, rel={}",
                         typ.rd.abi_name(),
                         typ.rs1.abi_name(),
                         typ.imm as i32);
