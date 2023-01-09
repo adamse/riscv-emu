@@ -94,7 +94,10 @@ impl std::fmt::Display for NameOrVal {
 /// - the block must end in a Ret, Branch or Cond instruction
 ///
 #[derive(Debug, Clone)]
-pub struct Block(pub Vec<(Option<Name>, Instr)>);
+pub struct Block {
+    /// Instruction stream
+    pub instructions: Vec<(Option<Name>, Instr)>,
+}
 
 
 /// Supported instructions in the IL
@@ -185,7 +188,7 @@ pub type Function = BTreeMap<BlockId, Block>;
 pub fn print_function(fun: &Function) {
     for (&blockid, block) in fun {
         println!("{}:", blockid);
-        for (var, instr) in &block.0 {
+        for (var, instr) in &block.instructions {
             let mut out = String::from("    ");
 
             if let Some(name) = var {
@@ -303,20 +306,20 @@ fn test() {
         use NameOrVal::*;
 
         BTreeMap::from([
-            (b0, Block(vec![
+            (b0, Block { instructions: vec![
                 (Some(cond), Instr::BinOp { a: Name(a), op: BinOp::LessThan, b: Name(b) } ),
                 (None,       Instr::Cond { val: Name(cond), true_dest: bt, false_dest: bf }),
-            ])),
-            (bt, Block(vec![
+            ]}),
+            (bt, Block { instructions: vec![
                 (None, Instr::Branch { dest: be }),
-            ])),
-            (bf, Block(vec![
+            ]}),
+            (bf, Block { instructions: vec![
                 (None, Instr::Branch { dest: be }),
-            ])),
-            (be, Block(vec![
+            ]}),
+            (be, Block { instructions: vec![
                 (Some(ret), Instr::Phi { assignments: BTreeMap::from([(bt, Name(b)), (bf, Name(a))]) }),
                 (None,      Instr::Return { vals: vec![Name(ret)] }),
-            ])),
+            ]}),
         ])
     };
 
@@ -346,11 +349,11 @@ fn test() {
         use NameOrVal::*;
 
         BTreeMap::from([
-            (b0, Block(vec![
+            (b0, Block { instructions: vec![
                 (Some(init), Instr::Literal { val: 10 }),
                 (None,       Instr::Branch { dest: bloop }),
-            ])),
-            (bloop, Block(vec![
+            ]}),
+            (bloop, Block { instructions: vec![
                 (Some(count),     Instr::Phi { assignments: BTreeMap::from([(b0, Name(init)), (bloop, Name(new_count))]) }),
                 (None,            Instr::WriteMem { addr: Name(addr), val: Name(val) }),
                 (Some(one),       Instr::Literal { val: 1 }),
@@ -358,10 +361,10 @@ fn test() {
                 (Some(zero),      Instr::Literal { val: 0 }),
                 (Some(cond),      Instr::BinOp { a: Name(new_count), op: BinOp::Eq, b: Name(zero) }),
                 (None,            Instr::Cond { val: Name(cond), true_dest: bend, false_dest: bloop }),
-            ])),
-            (bend, Block(vec![
+            ]}),
+            (bend, Block { instructions: vec![
                 (None, Instr::Return { vals: vec![] }),
-            ])),
+            ]}),
         ])
     };
 
@@ -398,12 +401,12 @@ fn test() {
         use NameOrVal::*;
 
         BTreeMap::from([
-            (b0, Block(vec![
+            (b0, Block { instructions: vec![
                 (Some(zero),  Instr::Literal { val: 0 }),
                 (Some(cond1), Instr::BinOp { a: Name(count), op: BinOp::Eq, b: Name(zero) }),
                 (None,        Instr::Cond { val: Name(cond1), true_dest: bloop, false_dest: bend }),
-            ])),
-            (bloop, Block(vec![
+            ]}),
+            (bloop, Block { instructions: vec![
                 (Some(count1),Instr::Phi { assignments:
                     BTreeMap::from([(b0, Name(count)), (bloop, Name(count2))]) }),
                 (Some(from1), Instr::Phi { assignments:
@@ -422,10 +425,10 @@ fn test() {
 
                 (Some(cond2), Instr::BinOp { a: Name(count2), op: BinOp::Eq, b: Name(zero) }),
                 (None,        Instr::Cond { val: Name(cond2), true_dest: bloop, false_dest: bend }),
-            ])),
-            (bend, Block(vec![
+            ]}),
+            (bend, Block { instructions: vec![
                 (None, Instr::Return { vals: vec![] }),
-            ])),
+            ]}),
         ])
     };
 
