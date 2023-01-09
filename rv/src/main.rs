@@ -79,5 +79,19 @@ fn main() {
     // and	s2,s2,a5
     disassemble_one(0, 0x00f97933);
     // ecall
-    disassemble(0x00000073);
+    disassemble_one(0, 0x00000073);
+
+    let mut elf = Elf::read("../test/test").unwrap();
+    println!("{elf:#x?}");
+
+    let code_seg = elf.load_segments.iter().find(|seg| seg.flags.x()).unwrap().clone();
+
+    let mut code = elf.get_data(code_seg.file_offset, code_seg.file_size).unwrap();
+    code.resize(code_seg.size as usize, 0);
+    println!("{}", code.len());
+
+    let entry = (elf.entry - code_seg.load_address) as usize;
+
+    disassemble(elf.entry, &code[entry..entry+4*20]);
+
 }
