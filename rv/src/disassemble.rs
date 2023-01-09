@@ -1,6 +1,12 @@
 use crate::instructions::*;
 
-pub fn disassemble(instr: u32) {
+pub fn disassemble(addr: u32, instrs: &[u8]) {
+    for (ii, instr) in instrs.array_chunks::<4>().enumerate() {
+        disassemble_one(addr + (ii * 4) as u32, u32::from_le_bytes(*instr));
+    }
+}
+
+pub fn disassemble_one(addr: u32, instr: u32) {
 
     // first 7 bits are the opcode
     let opcode: u32 = instr & ((1 << 7) - 1);
@@ -20,7 +26,10 @@ pub fn disassemble(instr: u32) {
         // JAL
         0b1101111 => {
             let typ = JType::parse(instr);
-            println!("jal {}, rel={:#08x}", typ.rd.abi_name(), typ.imm);
+            println!("jal {}, rel={:#08x}, abs={:#08x}",
+                typ.rd.abi_name(),
+                typ.imm,
+                (addr as i32 + typ.imm as i32) as u32);
         },
         // JALR
         0b1100111 => {
@@ -29,10 +38,11 @@ pub fn disassemble(instr: u32) {
             assert!(typ.funct3 == 0,
                 "JALR should have funct3 == 0");
 
-            println!("jalr {}, {}, rel={}, funct3={}",
-                     typ.rd.abi_name(),
-                     typ.rs1.abi_name(),
-                     typ.imm as i32, typ.funct3);
+            println!("jalr {}, {}, rel={}, abs={}",
+                typ.rd.abi_name(),
+                typ.rs1.abi_name(),
+                typ.imm as i32,
+                (addr as i32 + typ.imm as i32) as u32);
         },
 
         // BRANCH
@@ -41,45 +51,51 @@ pub fn disassemble(instr: u32) {
             match typ.funct3 {
                 // BEQ
                 0b000 => {
-                    println!("beq {}, {}, rel={:#08x}",
+                    println!("beq {}, {}, rel={:#08x}, abs={:#08x}",
                         typ.rs1.abi_name(),
                         typ.rs2.abi_name(),
-                        typ.imm);
+                        typ.imm,
+                        (addr as i32 + typ.imm as i32) as u32);
                 },
                 // BNE
                 0b001 => {
-                    println!("bne {}, {}, rel={:#08x}",
+                    println!("bne {}, {}, rel={:#08x}, abs={:#08x}",
                         typ.rs1.abi_name(),
                         typ.rs2.abi_name(),
-                        typ.imm);
+                        typ.imm,
+                        (addr as i32 + typ.imm as i32) as u32);
                 },
                 // BLT
                 0b100 => {
-                    println!("blt {}, {}, rel={:#08x}",
+                    println!("blt {}, {}, rel={:#08x}, abs={:#08x}",
                         typ.rs1.abi_name(),
                         typ.rs2.abi_name(),
-                        typ.imm);
+                        typ.imm,
+                        (addr as i32 + typ.imm as i32) as u32);
                 },
                 // BGE
                 0b101 => {
-                    println!("bge {}, {}, rel={:#08x}",
+                    println!("bge {}, {}, rel={:#08x}, abs={:#08x}",
                         typ.rs1.abi_name(),
                         typ.rs2.abi_name(),
-                        typ.imm);
+                        typ.imm,
+                        (addr as i32 + typ.imm as i32) as u32);
                 },
                 // BLTU
                 0b110 => {
-                    println!("bltu {}, {}, rel={:#08x}",
+                    println!("bltu {}, {}, rel={:#08x}, abs={:#08x}",
                         typ.rs1.abi_name(),
                         typ.rs2.abi_name(),
-                        typ.imm);
+                        typ.imm,
+                        (addr as i32 + typ.imm as i32) as u32);
                 },
                 // BGEU
                 0b111 => {
-                    println!("bgeu {}, {}, rel={:#08x}",
+                    println!("bgeu {}, {}, rel={:#08x}, abs={:#08x}",
                         typ.rs1.abi_name(),
                         typ.rs2.abi_name(),
-                        typ.imm);
+                        typ.imm,
+                        (addr as i32 + typ.imm as i32) as u32);
                 },
                 funct3 => {
                     panic!("Unknown BRANCH: {funct3:#03b}");
