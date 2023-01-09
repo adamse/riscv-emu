@@ -177,16 +177,32 @@ pub enum Instr {
 
 /// A function is a collection of basic blocks
 ///
-/// TODO: which is the entry block?
-/// TODO: how many arguments?
-/// TODO: more structure here
-pub type Function = BTreeMap<BlockId, Block>;
+pub struct Function {
+    /// Entry block id
+    ///
+    /// This block must exist in the block map.
+    pub entry: BlockId,
+
+    /// Number of arguments
+    pub nargs: u32,
+
+    /// Instruction blocks
+    pub blocks: BTreeMap<BlockId, Block>,
+}
 
 
 /// Pretty print a function
 ///
-pub fn print_function(fun: &Function) {
-    for (&blockid, block) in fun {
+pub fn print_function(name: &str, fun: &Function) {
+    let mut out = String::from(name);
+    out += "(";
+    for argno in 1..=fun.nargs {
+        out += &format!("{}, ", Name(argno));
+
+    }
+    out += ")";
+    println!("{out}");
+    for (&blockid, block) in &fun.blocks {
         println!("{}:", blockid);
         for (var, instr) in &block.instructions {
             let mut out = String::from("    ");
@@ -305,7 +321,7 @@ fn test() {
 
         use NameOrVal::*;
 
-        BTreeMap::from([
+        let blocks = BTreeMap::from([
             (b0, Block { instructions: vec![
                 (Some(cond), Instr::BinOp { a: Name(a), op: BinOp::LessThan, b: Name(b) } ),
                 (None,       Instr::Cond { val: Name(cond), true_dest: bt, false_dest: bf }),
@@ -320,11 +336,16 @@ fn test() {
                 (Some(ret), Instr::Phi { assignments: BTreeMap::from([(bt, Name(b)), (bf, Name(a))]) }),
                 (None,      Instr::Return { vals: vec![Name(ret)] }),
             ]}),
-        ])
+        ]);
+
+        Function {
+            blocks,
+            nargs: 2,
+            entry: b0,
+        }
     };
 
-    println!("max");
-    print_function(&max);
+    print_function("max", &max);
     println!("");
 
     let mut bg = BlockGen::new();
@@ -348,7 +369,7 @@ fn test() {
 
         use NameOrVal::*;
 
-        BTreeMap::from([
+        let blocks = BTreeMap::from([
             (b0, Block { instructions: vec![
                 (Some(init), Instr::Literal { val: 10 }),
                 (None,       Instr::Branch { dest: bloop }),
@@ -365,11 +386,16 @@ fn test() {
             (bend, Block { instructions: vec![
                 (None, Instr::Return { vals: vec![] }),
             ]}),
-        ])
+        ]);
+
+        Function {
+            blocks,
+            nargs: 2,
+            entry: b0,
+        }
     };
 
-    println!("write10");
-    print_function(&write10);
+    print_function("write10", &write10);
     println!("");
 
     let mut bg = BlockGen::new();
@@ -400,7 +426,7 @@ fn test() {
 
         use NameOrVal::*;
 
-        BTreeMap::from([
+        let blocks = BTreeMap::from([
             (b0, Block { instructions: vec![
                 (Some(zero),  Instr::Literal { val: 0 }),
                 (Some(cond1), Instr::BinOp { a: Name(count), op: BinOp::Eq, b: Name(zero) }),
@@ -429,10 +455,15 @@ fn test() {
             (bend, Block { instructions: vec![
                 (None, Instr::Return { vals: vec![] }),
             ]}),
-        ])
+        ]);
+
+        Function {
+            blocks,
+            nargs: 3,
+            entry: b0,
+        }
     };
 
-    println!("memcpy");
-    print_function(&memcpy);
+    print_function("memcpy", &memcpy);
     println!("");
 }
