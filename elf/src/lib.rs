@@ -14,8 +14,8 @@ pub enum Error {
     InvalidBitness,
     InvalidEndianness,
     InvalidOs(u8),
-    InvalidElfType([u8; 2]),
-    InvalidMachine([u8; 2]),
+    InvalidElfType,
+    InvalidMachine,
 }
 
 
@@ -107,78 +107,53 @@ impl Elf {
         let file = std::fs::File::open(path);
         let mut file = file.map_err(Error::ReadFile)?;
 
-        // check the ELF magic number at the start of the file
-        let mut buf = [0u8; 4];
+        // the elf program header is 52 bytes on a 32 bit system
+        let mut buf = [0u8; 52];
         file.read_exact(&mut buf[..]).map_err(Error::ReadFailure)?;
-        if buf != [0x7f, 0x45, 0x4c, 0x46] {
+
+        // check the ELF magic number at the start of the file
+        if buf[0..4] != [0x7f, 0x45, 0x4c, 0x46] {
             return Err(Error::InvalidElfMagic);
         }
 
         // check that it is a 32 bit executable
-        let mut buf = [0u8; 1];
-        file.read_exact(&mut buf[..]).map_err(Error::ReadFailure)?;
-        if buf != [1] {
+        if buf[4] != 1 {
             return Err(Error::InvalidBitness);
         }
 
         // check that it is little endian code
-        let mut buf = [0u8; 1];
-        file.read_exact(&mut buf[..]).map_err(Error::ReadFailure)?;
-        if buf != [1] {
+        if buf[5] != 1 {
             return Err(Error::InvalidEndianness);
         }
 
-        // skip elf version, should be 1
-        file.seek(std::io::SeekFrom::Current(1)).map_err(Error::SeekFailure)?;
-
-        // check that it is a system v executable
+        // check that it is a system v executable (0)
         // TODO: should be linux? (0x03) or maybe not? abi is sysv?
-        let mut buf = [0u8; 1];
-        file.read_exact(&mut buf[..]).map_err(Error::ReadFailure)?;
-        if buf != [0x0] {
+        if buf[0x7] != 0 {
             return Err(Error::InvalidOs(buf[0]));
         }
 
-        // skip abi version and padding
-        file.seek(std::io::SeekFrom::Start(0x10)).map_err(Error::SeekFailure)?;
-
         // check file type, should be a static exe ET_EXEC
-        let mut buf = [0u8; 2];
-        file.read_exact(&mut buf[..]).map_err(Error::ReadFailure)?;
-        if buf != [0x02, 0x0] {
-            return Err(Error::InvalidElfType(buf));
+        if buf[0x10..0x12] != [0x02, 0x0] {
+            return Err(Error::InvalidElfType);
         }
 
         // check machine type, should be RISC-V
-        let mut buf = [0u8; 2];
-        file.read_exact(&mut buf[..]).map_err(Error::ReadFailure)?;
-        if buf != [0xf3, 0x0] {
-            return Err(Error::InvalidMachine(buf));
+        if buf[0x12..0x14] != [0xf3, 0x0] {
+            return Err(Error::InvalidMachine);
         }
 
-        // skip e_version
-        file.seek(std::io::SeekFrom::Start(0x18)).map_err(Error::SeekFailure)?;
-
         // get the entry point for the program
-        let mut buf = [0u8; 4];
-        file.read_exact(&mut buf[..]).map_err(Error::ReadFailure)?;
-        let entry = u32::from_le_bytes(buf);
+        let entry = u32::from_le_bytes(buf[0x18..0x1c].try_into().unwrap());
+
 
         // get the program header table offset
-        let mut buf = [0u8; 4];
-        file.read_exact(&mut buf[..]).map_err(Error::ReadFailure)?;
-        let e_phoff = u32::from_le_bytes(buf) as u64;
+        let e_phoff = u32::from_le_bytes(buf[0x1c..0x20].try_into().unwrap()) as u64;
 
         // get the size of a program header entry
-        file.seek(std::io::SeekFrom::Start(0x2a)).map_err(Error::SeekFailure)?;
-        let mut buf = [0u8; 2];
-        file.read_exact(&mut buf[..]).map_err(Error::ReadFailure)?;
-        let e_phentsize = u16::from_le_bytes(buf) as u64;
+        let e_phentsize = u16::from_le_bytes(buf[0x2a..0x2c].try_into().unwrap()) as u64;
 
         // get the number of program header entries
-        let mut buf = [0u8; 2];
-        file.read_exact(&mut buf[..]).map_err(Error::ReadFailure)?;
-        let e_phnum = u16::from_le_bytes(buf) as u64;
+        let e_phnum = u16::from_le_bytes(buf[0x2c..0x2e].try_into().unwrap()) as u64;
 
         // process all program header entries
         let mut load_segments = vec![];
