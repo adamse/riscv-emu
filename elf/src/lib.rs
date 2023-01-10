@@ -1,3 +1,6 @@
+#![feature(stmt_expr_attributes)]
+#![feature(split_array)]
+
 use std::io::{Read, Seek};
 
 #[derive(Debug)]
@@ -100,6 +103,32 @@ pub struct Elf {
     pub load_segments: Vec<Segment>,
 }
 
+/// Consume a value which implements `from_le_bytes` from a buffer, advancing
+/// the buffer beyond the bytes that were consumed
+macro_rules! consume {
+    ($buf:expr, $ty:ty) => {{
+        const SIZE: usize = std::mem::size_of::<$ty>();
+
+        // check that we have enough bytes to extract a $ty
+        // + 1 instead of >= because >= confuses llvm/rustc so it
+        // refuses to fuse multiple checks with multiple consume! calls
+        if $buf.len() + 1 > SIZE {
+            // split into &[u8; SIZE] and &[u8]
+            let (x, rest) = $buf.split_array_ref::<SIZE>();
+
+            // get the val
+            let val = <$ty>::from_le_bytes(*x);
+
+            // advance the buffer
+            #[allow(unused_assignments)]
+            $buf = rest;
+            Some(val)
+        } else {
+            None
+        }
+    }}
+}
+
 impl Elf {
     /// Read a file, verify it is a linux ELF exe and find the load segments.
     ///
@@ -111,49 +140,67 @@ impl Elf {
         let mut buf = [0u8; 52];
         file.read_exact(&mut buf[..]).map_err(Error::ReadFailure)?;
 
+        let mut buf = &buf[..];
+
         // check the ELF magic number at the start of the file
-        if buf[0..4] != [0x7f, 0x45, 0x4c, 0x46] {
+        let magic = consume!(buf, u32).unwrap();
+        if magic != u32::from_le_bytes([0x7f, 0x45, 0x4c, 0x46]) {
             return Err(Error::InvalidElfMagic);
         }
 
         // check that it is a 32 bit executable
-        if buf[4] != 1 {
+        let class = consume!(buf, u8).unwrap();
+        if class != 1 {
             return Err(Error::InvalidBitness);
         }
 
         // check that it is little endian code
-        if buf[5] != 1 {
+        let endianness = consume!(buf, u8).unwrap();
+        if endianness != 1 {
             return Err(Error::InvalidEndianness);
         }
 
+        let _version = consume!(buf, u8).unwrap();
+
         // check that it is a system v executable (0)
         // TODO: should be linux? (0x03) or maybe not? abi is sysv?
-        if buf[0x7] != 0 {
-            return Err(Error::InvalidOs(buf[0]));
+        let abi = consume!(buf, u8).unwrap();
+        if abi != 0 {
+            return Err(Error::InvalidOs(abi));
         }
 
+        // skip abi version and padding
+        buf = &buf[8..];
+
         // check file type, should be a static exe ET_EXEC
-        if buf[0x10..0x12] != [0x02, 0x0] {
+        let typ = consume!(buf, u16).unwrap();
+        if typ != 0x02 {
             return Err(Error::InvalidElfType);
         }
 
         // check machine type, should be RISC-V
-        if buf[0x12..0x14] != [0xf3, 0x0] {
+        let machine = consume!(buf, u16).unwrap();
+        if machine != 0xf3 {
             return Err(Error::InvalidMachine);
         }
 
-        // get the entry point for the program
-        let entry = u32::from_le_bytes(buf[0x18..0x1c].try_into().unwrap());
+        // skip another version
+        let _version = consume!(buf, u32).unwrap();
 
+        // get the entry point for the program
+        let entry = consume!(buf, u32).unwrap();
 
         // get the program header table offset
-        let e_phoff = u32::from_le_bytes(buf[0x1c..0x20].try_into().unwrap()) as u64;
+        let e_phoff = consume!(buf, u32).unwrap() as u64;
+
+        // skip shoff, flags and header size
+        buf = &buf[10..];
 
         // get the size of a program header entry
-        let e_phentsize = u16::from_le_bytes(buf[0x2a..0x2c].try_into().unwrap()) as u64;
+        let e_phentsize = consume!(buf, u16).unwrap() as u64;
 
         // get the number of program header entries
-        let e_phnum = u16::from_le_bytes(buf[0x2c..0x2e].try_into().unwrap()) as u64;
+        let e_phnum = consume!(buf, u16).unwrap() as u64;
 
         // process all program header entries
         let mut load_segments = vec![];
@@ -162,11 +209,13 @@ impl Elf {
             file.seek(std::io::SeekFrom::Start(e_phoff + entry_no * e_phentsize))
                 .map_err(Error::SeekFailure)?;
 
-            // get the entry type
-            // get the number of program header entries
-            let mut buf = [0u8; 4];
+            let mut buf = [0u8; 0x20];
             file.read_exact(&mut buf[..]).map_err(Error::ReadFailure)?;
-            let p_type = u32::from_le_bytes(buf);
+
+            let mut buf = &buf[..];
+
+            // get the entry type
+            let p_type = consume!(buf, u32).unwrap();
 
             if p_type != 0x1 {
                 // skip if type is not PT_LOAD
@@ -174,32 +223,23 @@ impl Elf {
             }
 
             // get the file offset for the load segment
-            let mut buf = [0u8; 4];
-            file.read_exact(&mut buf[..]).map_err(Error::ReadFailure)?;
-            let file_offset = u32::from_le_bytes(buf);
+            let file_offset = consume!(buf, u32).unwrap();
 
             // get the load address
-            let mut buf = [0u8; 4];
-            file.read_exact(&mut buf[..]).map_err(Error::ReadFailure)?;
-            let load_address = u32::from_le_bytes(buf);
+            let load_address = consume!(buf, u32).unwrap();
 
             // skip p_paddr
-            file.seek(std::io::SeekFrom::Current(4)).map_err(Error::SeekFailure)?;
+            let _paddr = consume!(buf, u32);
 
             // get the file size for the load segment
-            let mut buf = [0u8; 4];
-            file.read_exact(&mut buf[..]).map_err(Error::ReadFailure)?;
-            let file_size = u32::from_le_bytes(buf);
+            let file_size = consume!(buf, u32).unwrap();
 
             // get the memory size for the load segment
-            let mut buf = [0u8; 4];
-            file.read_exact(&mut buf[..]).map_err(Error::ReadFailure)?;
-            let size = u32::from_le_bytes(buf);
+            let size = consume!(buf, u32).unwrap();
 
             // get the flags for the load segment
-            let mut buf = [0u8; 4];
-            file.read_exact(&mut buf[..]).map_err(Error::ReadFailure)?;
-            let flags = Flags(u32::from_le_bytes(buf));
+            let flags = consume!(buf, u32).unwrap();
+            let flags = Flags(flags);
 
             // read the data
             file.seek(std::io::SeekFrom::Start(file_offset as u64))
