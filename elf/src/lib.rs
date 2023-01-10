@@ -84,12 +84,15 @@ pub struct Segment {
 
     /// Flags
     pub flags: Flags,
+
+    /// Data in segment
+    ///
+    /// This is only the data in the file, length is file_size.
+    pub data: Box<[u8]>,
 }
 
 #[derive(Debug)]
 pub struct Elf {
-    file: std::fs::File,
-
     /// Entry point for the program
     pub entry: u32,
 
@@ -100,7 +103,7 @@ pub struct Elf {
 impl Elf {
     /// Read a file, verify it is a linux ELF exe and find the load segments.
     ///
-    pub fn read<P: AsRef<std::path::Path>>(path: P) -> Result<Self> {
+    pub fn load<P: AsRef<std::path::Path>>(path: P) -> Result<Self> {
         let file = std::fs::File::open(path);
         let mut file = file.map_err(Error::ReadFile)?;
 
@@ -223,31 +226,29 @@ impl Elf {
             file.read_exact(&mut buf[..]).map_err(Error::ReadFailure)?;
             let flags = Flags(u32::from_le_bytes(buf));
 
+            // read the data
+            file.seek(std::io::SeekFrom::Start(file_offset as u64))
+                .map_err(Error::SeekFailure)?;
+
+            let mut data = Vec::with_capacity(file_size as usize);
+            data.resize(size as usize, 0);
+            file.read_exact(&mut data[..]).map_err(Error::ReadFailure)?;
+            let data = data.into_boxed_slice();
+
             load_segments.push(Segment {
                 file_offset,
                 file_size,
                 load_address,
                 size,
                 flags,
+                data,
             });
         }
 
         Ok(Elf {
-            file,
             entry,
             load_segments,
         })
-    }
-
-    pub fn get_data(&mut self, offset: u32, size: u32) -> Result<Vec<u8>> {
-        self.file.seek(std::io::SeekFrom::Start(offset as u64))
-            .map_err(Error::SeekFailure)?;
-
-        let mut out = Vec::with_capacity(size as usize);
-        out.resize(size as usize, 0);
-        self.file.read_exact(&mut out[..]).map_err(Error::ReadFailure)?;
-
-        Ok(out)
     }
 }
 
