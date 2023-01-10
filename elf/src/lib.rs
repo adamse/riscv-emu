@@ -1,6 +1,5 @@
 use std::io::{Read, Seek};
 
-
 #[derive(Debug)]
 pub enum Error {
     /// Failed to read the file

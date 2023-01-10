@@ -2,11 +2,10 @@
 
 mod instructions;
 mod disassemble;
-// mod emulator;
-mod elf;
+mod emulator;
 
 use crate::disassemble::*;
-use crate::elf::Elf;
+use elf::Elf;
 
 fn main() {
     // lui a0,0x11
