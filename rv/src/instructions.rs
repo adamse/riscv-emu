@@ -1,7 +1,8 @@
 
+/// Representing an x0-x31 register
+///
 #[derive(Debug, Clone, Copy)]
 #[repr(transparent)]
-/// Representing an x0-x31 register
 pub struct Reg(pub u8);
 
 impl Reg {

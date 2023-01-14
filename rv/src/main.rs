@@ -5,6 +5,7 @@ mod disassemble;
 mod emulator;
 
 use crate::disassemble::*;
+use crate::emulator::*;
 use elf::Elf;
 
 fn main() {
@@ -13,11 +14,10 @@ fn main() {
 
     let code_seg = elf.load_segments.iter().find(|seg| seg.flags.x()).unwrap();
 
-    let mut code = Vec::from(code_seg.data.clone());
-    code.resize(code_seg.size as usize, 0);
-
     let entry = (elf.entry - code_seg.load_address) as usize;
 
-    disassemble(elf.entry, &code[entry..entry+4*20]);
+    disassemble(elf.entry, &code_seg.data[entry..entry+4*20]);
+
+    let _emu = Emulator::new(&elf);
 
 }

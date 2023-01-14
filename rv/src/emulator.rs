@@ -1,34 +1,42 @@
-struct Regs {
-    /// x1-x31 registers
-    regs: [u32; 31],
-}
+use elf::Elf;
+use crate::instructions::Reg;
 
-/// Creates a getter and a setter for a register
-///
-/// `macro_rules!(reg getter name, reg setter name, register index)`
-macro_rules! make_register_get_set {
-    ($regget:ident, $regset:ident, $regidx:literal) => {
-        fn $regget(&self) -> u32 {
-            self.regs[$regidx]
-        }
-        fn $regset(&mut self, reg: u32) {
-            self.regs[$regidx] = reg;
-        }
-    };
-}
+pub struct Emulator {
+    pub pc: u32,
+    pub regs: [u32; 31],
+    pub mem: Vec<u8>,
 
-impl Regs {
-    /// read X0
-    fn x0(&self) -> u32 { 0 }
-}
-
-use crate::instructions::*;
-
-struct Emulator {
-    mem: Vec<u8>,
-    pc: Reg,
-    regs: Regs,
 }
 
 impl Emulator {
+    pub fn new(elf: &Elf) -> Self {
+        // 25 mb
+        let mut mem = vec![0u8; 25 * 1024 * 1024];
+
+        for segment in &elf.load_segments {
+            let start = segment.load_address as usize;
+            let end = start + segment.file_size as usize;
+            mem[start..end].copy_from_slice(&segment.data);
+        }
+
+        Emulator {
+            pc: elf.entry,
+            regs: [0; 31],
+            mem,
+        }
+    }
+
+    fn set_reg(&mut self, reg: Reg, val: u32) {
+        if reg.0 != 0 {
+            self.regs[reg.0 as usize - 1] = val;
+        }
+    }
+
+    fn get_reg(&self, reg: Reg) -> u32 {
+        if reg.0 != 0 {
+            self.regs[reg.0 as usize - 1]
+        } else {
+            0
+        }
+    }
 }
