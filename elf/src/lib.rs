@@ -1,5 +1,6 @@
 #![feature(stmt_expr_attributes)]
 #![feature(split_array)]
+#![feature(new_uninit)]
 
 use std::io::{Read, Seek};
 
@@ -245,10 +246,12 @@ impl Elf {
             file.seek(std::io::SeekFrom::Start(file_offset as u64))
                 .map_err(Error::SeekFailure)?;
 
-            let mut data = Vec::with_capacity(file_size as usize);
-            data.resize(size as usize, 0);
+            let data = Box::new_zeroed_slice(file_size as usize);
+
+            // safety: zero is a good value for u8
+            let mut data = unsafe { data.assume_init() };
+
             file.read_exact(&mut data[..]).map_err(Error::ReadFailure)?;
-            let data = data.into_boxed_slice();
 
             load_segments.push(Segment {
                 file_offset,
