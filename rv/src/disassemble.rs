@@ -2,11 +2,11 @@ use crate::instructions::*;
 
 pub fn disassemble(addr: u32, instrs: &[u8]) {
     for (ii, instr) in instrs.array_chunks::<4>().enumerate() {
-        disassemble_one(addr + (ii * 4) as u32, u32::from_le_bytes(*instr));
+        disassemble_one(addr + (ii * 4) as u32, u32::from_le_bytes(*instr), false);
     }
 }
 
-pub fn disassemble_one(addr: u32, instr: u32) {
+pub fn disassemble_one(addr: u32, instr: u32, abi_name: bool) {
 
     // first 7 bits are the opcode
     let opcode: u32 = instr & ((1 << 7) - 1);
@@ -16,18 +16,18 @@ pub fn disassemble_one(addr: u32, instr: u32) {
         // LUI
         0b0110111 => {
             let typ = UType::parse(instr);
-            println!("lui {}, imm={:#08x}", typ.rd.name(), typ.imm);
+            println!("lui {}, imm={:#08x}", typ.rd.name2(abi_name), typ.imm);
         },
         // AUIPC
         0b0010111 => {
             let typ = UType::parse(instr);
-            println!("auipc {}, imm={:#08x}", typ.rd.name(), typ.imm);
+            println!("auipc {}, imm={:#08x}", typ.rd.name2(abi_name), typ.imm);
         },
         // JAL
         0b1101111 => {
             let typ = JType::parse(instr);
             println!("jal {}, rel={}, abs={:#08x}",
-                typ.rd.name(),
+                typ.rd.name2(abi_name),
                 typ.imm,
                 (addr as i32 + typ.imm as i32) as u32);
         },
@@ -39,8 +39,8 @@ pub fn disassemble_one(addr: u32, instr: u32) {
                 "JALR should have funct3 == 0");
 
             println!("jalr {}, {}, rel={}, abs={}",
-                typ.rd.name(),
-                typ.rs1.name(),
+                typ.rd.name2(abi_name),
+                typ.rs1.name2(abi_name),
                 typ.imm as i32,
                 (addr as i32 + typ.imm as i32) as u32);
         },
@@ -52,48 +52,48 @@ pub fn disassemble_one(addr: u32, instr: u32) {
                 // BEQ
                 0b000 => {
                     println!("beq {}, {}, rel={}, abs={:#08x}",
-                        typ.rs1.name(),
-                        typ.rs2.name(),
+                        typ.rs1.name2(abi_name),
+                        typ.rs2.name2(abi_name),
                         typ.imm,
                         (addr as i32 + typ.imm as i32) as u32);
                 },
                 // BNE
                 0b001 => {
                     println!("bne {}, {}, rel={}, abs={:#08x}",
-                        typ.rs1.name(),
-                        typ.rs2.name(),
+                        typ.rs1.name2(abi_name),
+                        typ.rs2.name2(abi_name),
                         typ.imm,
                         (addr as i32 + typ.imm as i32) as u32);
                 },
                 // BLT
                 0b100 => {
                     println!("blt {}, {}, rel={}, abs={:#08x}",
-                        typ.rs1.name(),
-                        typ.rs2.name(),
+                        typ.rs1.name2(abi_name),
+                        typ.rs2.name2(abi_name),
                         typ.imm,
                         (addr as i32 + typ.imm as i32) as u32);
                 },
                 // BGE
                 0b101 => {
                     println!("bge {}, {}, rel={}, abs={:#08x}",
-                        typ.rs1.name(),
-                        typ.rs2.name(),
+                        typ.rs1.name2(abi_name),
+                        typ.rs2.name2(abi_name),
                         typ.imm,
                         (addr as i32 + typ.imm as i32) as u32);
                 },
                 // BLTU
                 0b110 => {
                     println!("bltu {}, {}, rel={}, abs={:#08x}",
-                        typ.rs1.name(),
-                        typ.rs2.name(),
-                        typ.imm,
+                        typ.rs1.name2(abi_name),
+                        typ.rs2.name2(abi_name),
+                        typ.imm as i32,
                         (addr as i32 + typ.imm as i32) as u32);
                 },
                 // BGEU
                 0b111 => {
                     println!("bgeu {}, {}, rel={}, abs={:#08x}",
-                        typ.rs1.name(),
-                        typ.rs2.name(),
+                        typ.rs1.name2(abi_name),
+                        typ.rs2.name2(abi_name),
                         typ.imm,
                         (addr as i32 + typ.imm as i32) as u32);
                 },
@@ -110,36 +110,36 @@ pub fn disassemble_one(addr: u32, instr: u32) {
                 // LB
                 0b000 => {
                     println!("lb {}, {}, rel={}",
-                        typ.rd.name(),
-                        typ.rs1.name(),
+                        typ.rd.name2(abi_name),
+                        typ.rs1.name2(abi_name),
                         typ.imm as i32);
                 },
                 // LH
                 0b001 => {
                     println!("lh {}, {}, rel={}",
-                        typ.rd.name(),
-                        typ.rs1.name(),
+                        typ.rd.name2(abi_name),
+                        typ.rs1.name2(abi_name),
                         typ.imm as i32);
                 },
                 // LW
                 0b010 => {
                     println!("lw {}, {}, rel={}",
-                        typ.rd.name(),
-                        typ.rs1.name(),
+                        typ.rd.name2(abi_name),
+                        typ.rs1.name2(abi_name),
                         typ.imm as i32);
                 },
                 // LBU
                 0b100 => {
                     println!("lbu {}, {}, rel={}",
-                        typ.rd.name(),
-                        typ.rs1.name(),
+                        typ.rd.name2(abi_name),
+                        typ.rs1.name2(abi_name),
                         typ.imm as i32);
                 },
                 // LHU
                 0b101 => {
                     println!("lhu {}, {}, rel={}",
-                        typ.rd.name(),
-                        typ.rs1.name(),
+                        typ.rd.name2(abi_name),
+                        typ.rs1.name2(abi_name),
                         typ.imm as i32);
                 },
                 funct3 => {
@@ -155,22 +155,22 @@ pub fn disassemble_one(addr: u32, instr: u32) {
                 // SB
                 0b000 => {
                     println!("sb {}, {}, rel={}",
-                        typ.rs2.name(),
-                        typ.rs1.name(),
+                        typ.rs2.name2(abi_name),
+                        typ.rs1.name2(abi_name),
                         typ.imm as i32);
                 },
                 // SH
                 0b001 => {
                     println!("sh {}, {}, rel={}",
-                        typ.rs2.name(),
-                        typ.rs1.name(),
+                        typ.rs2.name2(abi_name),
+                        typ.rs1.name2(abi_name),
                         typ.imm as i32);
                 },
                 // SW
                 0b010 => {
                     println!("sw {}, {}, rel={}",
-                        typ.rs2.name(),
-                        typ.rs1.name(),
+                        typ.rs2.name2(abi_name),
+                        typ.rs1.name2(abi_name),
                         typ.imm as i32);
                 },
                 funct3 => {
@@ -194,51 +194,51 @@ pub fn disassemble_one(addr: u32, instr: u32) {
                 // ADDI
                 0b000 => {
                     println!("addi {}, {}, {}",
-                        typ.rd.name(),
-                        typ.rs1.name(),
+                        typ.rd.name2(abi_name),
+                        typ.rs1.name2(abi_name),
                         typ.imm as i32);
                 },
                 // SLTI
                 0b010 => {
                     println!("slti {}, {}, {}",
-                        typ.rd.name(),
-                        typ.rs1.name(),
+                        typ.rd.name2(abi_name),
+                        typ.rs1.name2(abi_name),
                         typ.imm as i32);
                 },
                 // SLTIU
                 0b011 => {
                     println!("sltiu {}, {}, {}",
-                        typ.rd.name(),
-                        typ.rs1.name(),
+                        typ.rd.name2(abi_name),
+                        typ.rs1.name2(abi_name),
                         typ.imm);
                 },
                 // XORI
                 0b100 => {
                     println!("xori {}, {}, {:#08x}",
-                        typ.rd.name(),
-                        typ.rs1.name(),
+                        typ.rd.name2(abi_name),
+                        typ.rs1.name2(abi_name),
                         typ.imm);
                 },
                 // ORI
                 0b110 => {
                     println!("ori {}, {}, {:#08x}",
-                        typ.rd.name(),
-                        typ.rs1.name(),
+                        typ.rd.name2(abi_name),
+                        typ.rs1.name2(abi_name),
                         typ.imm);
                 },
                 // ANDI
                 0b111 => {
                     println!("andi {}, {}, {:#08x}",
-                        typ.rd.name(),
-                        typ.rs1.name(),
+                        typ.rd.name2(abi_name),
+                        typ.rs1.name2(abi_name),
                         typ.imm);
                 },
                 // SLLI
                 0b001 => {
                     assert!(arithmetic == 0b0);
                     println!("slli {}, {}, {}",
-                        typ.rd.name(),
-                        typ.rs1.name(),
+                        typ.rd.name2(abi_name),
+                        typ.rs1.name2(abi_name),
                         shamt);
                 },
                 // SRLI & SRAI
@@ -247,15 +247,15 @@ pub fn disassemble_one(addr: u32, instr: u32) {
                         // SRLI
                         0b0 => {
                             println!("srli {}, {}, {}",
-                                typ.rd.name(),
-                                typ.rs1.name(),
+                                typ.rd.name2(abi_name),
+                                typ.rs1.name2(abi_name),
                                 shamt);
                                 },
                         // SRAI
                         0b0100000 => {
                             println!("srai {}, {}, {}",
-                                typ.rd.name(),
-                                typ.rs1.name(),
+                                typ.rd.name2(abi_name),
+                                typ.rs1.name2(abi_name),
                                 shamt);
                                 },
                         _ => {
@@ -277,72 +277,72 @@ pub fn disassemble_one(addr: u32, instr: u32) {
                 // ADD
                 (0b000, 0b0000000) => {
                     println!("add {}, {}, {}",
-                        typ.rd.name(),
-                        typ.rs1.name(),
-                        typ.rs2.name());
+                        typ.rd.name2(abi_name),
+                        typ.rs1.name2(abi_name),
+                        typ.rs2.name2(abi_name));
                 },
                 // SUB
                 (0b000, 0b0100000) => {
                     println!("sub {}, {}, {}",
-                        typ.rd.name(),
-                        typ.rs1.name(),
-                        typ.rs2.name());
+                        typ.rd.name2(abi_name),
+                        typ.rs1.name2(abi_name),
+                        typ.rs2.name2(abi_name));
                 },
                 // SLL
                 (0b001, 0b0000000) => {
                     println!("sll {}, {}, {}",
-                        typ.rd.name(),
-                        typ.rs1.name(),
-                        typ.rs2.name());
+                        typ.rd.name2(abi_name),
+                        typ.rs1.name2(abi_name),
+                        typ.rs2.name2(abi_name));
                 },
                 // SLT
                 (0b010, 0b0000000) => {
                     println!("slt {}, {}, {}",
-                        typ.rd.name(),
-                        typ.rs1.name(),
-                        typ.rs2.name());
+                        typ.rd.name2(abi_name),
+                        typ.rs1.name2(abi_name),
+                        typ.rs2.name2(abi_name));
                 },
                 // SLTU
                 (0b011, 0b0000000) => {
                     println!("sltu {}, {}, {}",
-                        typ.rd.name(),
-                        typ.rs1.name(),
-                        typ.rs2.name());
+                        typ.rd.name2(abi_name),
+                        typ.rs1.name2(abi_name),
+                        typ.rs2.name2(abi_name));
                 },
                 // XOR
                 (0b100, 0b0000000) => {
                     println!("xor {}, {}, {}",
-                        typ.rd.name(),
-                        typ.rs1.name(),
-                        typ.rs2.name());
+                        typ.rd.name2(abi_name),
+                        typ.rs1.name2(abi_name),
+                        typ.rs2.name2(abi_name));
                 },
                 // SRL
                 (0b101, 0b0000000) => {
                     println!("slr {}, {}, {}",
-                        typ.rd.name(),
-                        typ.rs1.name(),
-                        typ.rs2.name());
+                        typ.rd.name2(abi_name),
+                        typ.rs1.name2(abi_name),
+                        typ.rs2.name2(abi_name));
                 },
                 // SRA
                 (0b101, 0b0100000) => {
                     println!("sra {}, {}, {}",
-                        typ.rd.name(),
-                        typ.rs1.name(),
-                        typ.rs2.name());
+                        typ.rd.name2(abi_name),
+                        typ.rs1.name2(abi_name),
+                        typ.rs2.name2(abi_name));
                 },
                 // OR
                 (0b110, 0b0000000) => {
                     println!("or {}, {}, {}",
-                        typ.rd.name(),
-                        typ.rs1.name(),
-                        typ.rs2.name());
+                        typ.rd.name2(abi_name),
+                        typ.rs1.name2(abi_name),
+                        typ.rs2.name2(abi_name));
                 },
                 // AND
                 (0b111, 0b0000000) => {
                     println!("and {}, {}, {}",
-                        typ.rd.name(),
-                        typ.rs1.name(),
-                        typ.rs2.name());
+                        typ.rd.name2(abi_name),
+                        typ.rs1.name2(abi_name),
+                        typ.rs2.name2(abi_name));
                 },
                 (funct3, funct7) => {
                     panic!("Uknown OP-IMM: funct3={funct3:#03b}, funct7={funct7:#07b}");

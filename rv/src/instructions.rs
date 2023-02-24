@@ -1,3 +1,37 @@
+#[repr(u8)]
+#[derive(Debug, Clone, Copy)]
+pub enum RegName {
+    // zero register
+    Zero,
+    // return address
+    Ra,
+    // stack pointer
+    Sp,
+    // global pointer
+    Gp,
+    // thread pointer
+    Tp,
+    // temporaries
+    T0, T1, T2,
+    // saved register/frame pointer, alternative name Fp
+    S0,
+    // saved register
+    S1,
+    // function arguments/return values
+    A0, A1,
+    // function arguments
+    A2, A3, A4, A5, A6, A7,
+    // saved registers
+    S2, S3, S4, S5, S6, S7, S8, S9, S10, S11,
+    // temporary registers
+    T3, T4, T5, T6,
+}
+
+impl RegName {
+    pub fn as_reg(self) -> Reg {
+        Reg(self as u8)
+    }
+}
 
 /// Representing an x0-x31 register
 ///
@@ -6,6 +40,13 @@
 pub struct Reg(pub u8);
 
 impl Reg {
+    pub fn name2(self, abi_name: bool) -> &'static str {
+        if abi_name {
+            self.abi_name()
+        } else {
+            self.name()
+        }
+    }
     /// Get the xN name of the register
     pub fn name(self) -> &'static str {
         const NAMES: [&str; 32] = [

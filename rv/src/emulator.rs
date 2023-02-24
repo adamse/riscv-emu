@@ -1,9 +1,11 @@
+use std::io::Write;
+
 use elf::Elf;
 
 use crate::instructions::*;
 use crate::disassemble::*;
 
-const TRACE: bool = true;
+const TRACE: bool = false;
 
 #[derive(Debug)]
 pub struct Emulator {
@@ -57,22 +59,58 @@ impl Emulator {
         }
     }
 
+    /// write current instruction and register state to the trace file
+    ///
+    /// A trace record is (1 + 1 + 31) * 4 bytes long (instruction, pc, general purpose registers)
+    fn trace_binary(&self, pc: u32, file: &mut std::fs::File) {
+        // write the instruction to the trace
+        let instr = &self.mem[pc as usize..][..4];
+        file.write_all(instr);
+
+        // write pc to the trace
+        let pc = pc.to_le_bytes();
+        file.write_all(&pc[..]);
+
+        // write all the other registers to the trace
+        let regs = &self.regs as *const u32 as *const u8;
+        let regs = unsafe {
+            std::slice::from_raw_parts(regs, self.regs.len() * std::mem::size_of::<u32>())
+        };
+        file.write_all(regs);
+    }
+
+    fn trace_print2(&self, pc: u32) {
+        print!("  pc {pc:#010x}");
+        for i in 1u8..4 {
+            let reg = Reg(i);
+            print!(" {:>3} {:#010x}", reg.abi_name(), self.read_reg(reg));
+        }
+        println!();
+        for i in (4u8..31).step_by(4) {
+            for j in 0..4 {
+                let reg = Reg(i + j);
+                print!(" {:>3} {:#010x}", reg.abi_name(), self.read_reg(reg));
+            }
+            println!();
+        }
+    }
+
     fn trace_print(&self, pc: u32) {
-        println!(" pc={:#08x}  x1={:#08x}  x2={:08x}  x3={:#08x}",
+        println!(" pc {:#010x}  x1 {:#010x}  x2 {:010x}  x3 {:#010x}",
             pc, self.regs[0], self.regs[1], self.regs[2]);
-        println!(" x4={:#08x}  x5={:#08x}  x6={:#08x}  x7={:#08x}",
+        println!(" x4 {:#010x}  x5 {:#010x}  x6 {:#010x}  x7 {:#010x}",
             self.regs[3], self.regs[4], self.regs[5], self.regs[6]);
-        println!(" x8={:#08x}  x9={:#08x} x10={:#08x} x11={:#08x}",
+        println!(" x8 {:#010x}  x9 {:#010x} x10 {:#010x} x11 {:#010x}",
             self.regs[7], self.regs[8], self.regs[9], self.regs[10]);
-        println!("x12={:#08x} x13={:#08x} x14={:#08x} x15={:#08x}",
+        println!("x12 {:#010x} x13 {:#010x} x14 {:#010x} x15 {:#010x}",
             self.regs[11], self.regs[12], self.regs[13], self.regs[14]);
-        println!("x16={:#08x} x17={:#08x} x18={:#08x} x19={:#08x}",
+        println!("x16 {:#010x} x17 {:#010x} x18 {:#010x} x19 {:#010x}",
             self.regs[15], self.regs[16], self.regs[17], self.regs[18]);
-        println!("x20={:#08x} x21={:#08x} x22={:#08x} x23={:#08x}",
+        println!("x20 {:#010x} x21 {:#010x} x22 {:#010x} x23 {:#010x}",
             self.regs[19], self.regs[20], self.regs[21], self.regs[22]);
-        println!("x24={:#08x} x25={:#08x} x26={:#08x} x27={:#08x}",
+        println!("x24 {:#010x} x25 {:#010x} x26 {:#010x} x27 {:#010x}",
             self.regs[23], self.regs[24], self.regs[25], self.regs[26]);
-        println!("x28={:#08x} x29={:#08x} x30={:#08x} x31={:#08x}",
+        println!("x28 {:#010x} x29 {:#010x} x30 {:#010x} x31 {:#010x}",
             self.regs[27], self.regs[28], self.regs[29], self.regs[30]);
     }
 
