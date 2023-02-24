@@ -7,12 +7,39 @@ use crate::disassemble::*;
 
 const TRACE: bool = false;
 
+#[derive(Debug, Clone, Copy)]
+#[repr(u8)]
+pub enum Perms {
+    /// No permissions
+    None = 0,
+
+    /// Read
+    Read = 0b1,
+
+    /// Write
+    Write = 0b10,
+
+    /// Executable
+    Exec = 0b100,
+
+    /// Read after write
+    ReadAfterWrite = 0b1000,
+}
+
+impl Perms {
+    fn test(self, byte: u8) -> bool {
+        ((self as u8) & byte) != 0
+    }
+}
+
 #[derive(Debug)]
 pub struct Emulator {
     pub pc: u32,
     regs: [u32; 31],
-    pub mem: Vec<u8>,
+    pub mem: Box<[u8]>,
 
+    // memory permissions
+    pub perms: Box<[u8]>,
 }
 
 #[derive(Debug)]
@@ -20,28 +47,48 @@ pub enum EmulatorExit {
     Syscall,
     Break,
     InvalidInstruction(u32),
+    InvalidMemoryAccess {
+        perm: Perms,
+        addr: u32
+    },
 }
 
 impl Emulator {
     pub fn new(elf: &Elf) -> Self {
         // 25 mb
-        let mut mem = vec![0u8; 25 * 1024 * 1024];
+        let size = 25 * 1024 * 1024;
+        let mem = Box::new_zeroed_slice(size);
+        let mut mem = unsafe { mem.assume_init() };
+
+        let perms = Box::new_zeroed_slice(size);
+        let mut perms = unsafe { perms.assume_init() };
 
         for segment in &elf.load_segments {
             let start = segment.load_address as usize;
             let end = start + segment.file_size as usize;
             mem[start..end].copy_from_slice(&segment.data);
-            // TODO: set permissions
+
+            let perm =
+                if segment.flags.r() { Perms::Read as u8 } else { 0 } |
+                if segment.flags.w() { Perms::Write as u8 } else { 0 } |
+                if segment.flags.x() { Perms::Exec as u8 } else { 0 };
+
+            for i in start..end {
+                perms[i] = perm;
+            }
         }
 
-        // allocate an initial stack
         let mut regs = [0; 31];
-        regs[1] = (mem.len() - 4096) as u32;
+
+        // allocate an initial stack
+        // 2M at the end of memory
+        regs[1] = (mem.len() - 2*1024*1024) as u32;
 
         Emulator {
             pc: elf.entry,
             regs,
             mem,
+            perms
         }
     }
 
@@ -126,14 +173,52 @@ impl Emulator {
                 break;
             }
         }
+        'main: loop {
 
-        loop {
-            let instr =self.mem[pc as usize..pc as usize + 4].try_into().unwrap();
+            macro_rules! read_mem {
+                ($addr:expr, $ty:ty) => {{
+                    const SIZE: usize = std::mem::size_of::<$ty>();
+
+                    // check permissions
+                    for i in 0..SIZE {
+                        if !Perms::Read.test(self.perms[$addr + i]) {
+                            ret = EmulatorExit::InvalidMemoryAccess {
+                                perm: Perms::Read,
+                                addr: ($addr + i) as u32
+                            };
+                            break 'main;
+                        }
+                    }
+
+                    <$ty>::from_le_bytes(self.mem[$addr..$addr + SIZE].try_into().unwrap())
+                }}
+            }
+
+            macro_rules! write_mem {
+                ($addr:expr, $ty:ty, $data:expr) => {{
+                    const SIZE: usize = std::mem::size_of::<$ty>();
+
+                    // check permissions
+                    for i in 0..SIZE {
+                        if !Perms::Write.test(self.perms[$addr + i]) {
+                            ret = EmulatorExit::InvalidMemoryAccess {
+                                perm: Perms::Write,
+                                addr: ($addr + i) as u32
+                            };
+                            break 'main;
+                        }
+                    }
+                    self.mem[$addr..$addr + SIZE].copy_from_slice(&<$ty>::to_le_bytes($data));
+                }}
+            }
+
+            let instr = self.mem[pc as usize..pc as usize + 4].try_into().unwrap();
             let instr = u32::from_le_bytes(instr);
 
             if TRACE {
                 self.trace_print(pc);
-                disassemble_one(pc as u32, instr);
+                disassemble_one(pc as u32, instr, true);
+            }
             }
 
             // first 7 bits are the opcode
@@ -236,38 +321,35 @@ impl Emulator {
                         0b000 => {
                             let addr = self.read_reg(typ.rs1).wrapping_add(typ.imm);
                             let addr = addr as usize;
-                            let data = self.mem[addr] as i8;
+                            let data = read_mem!(addr, i8);
                             self.write_reg(typ.rd, data as i32 as u32);
                         },
                         // LH
                         0b001 => {
                             let addr = self.read_reg(typ.rs1).wrapping_add(typ.imm);
                             let addr = addr as usize;
-                            let data = &self.mem[addr..addr+2];
-                            let data = i16::from_le_bytes(data.try_into().unwrap());
+                            let data = read_mem!(addr, i16);
                             self.write_reg(typ.rd, data as i32 as u32);
                         },
                         // LW
                         0b010 => {
                             let addr = self.read_reg(typ.rs1).wrapping_add(typ.imm);
                             let addr = addr as usize;
-                            let data = &self.mem[addr..addr+4];
-                            let data = u32::from_le_bytes(data.try_into().unwrap());
+                            let data = read_mem!(addr, u32);
                             self.write_reg(typ.rd, data);
                         },
                         // LBU
                         0b100 => {
                             let addr = self.read_reg(typ.rs1).wrapping_add(typ.imm);
                             let addr = addr as usize;
-                            let data = self.mem[addr];
+                            let data = read_mem!(addr, u8);
                             self.write_reg(typ.rd, data as u32);
                         },
                         // LHU
                         0b101 => {
                             let addr = self.read_reg(typ.rs1).wrapping_add(typ.imm);
                             let addr = addr as usize;
-                            let data = &self.mem[addr..addr+2];
-                            let data = u16::from_le_bytes(data.try_into().unwrap());
+                            let data = read_mem!(addr, u16);
                             self.write_reg(typ.rd, data as u32);
                         },
                         _ => {
@@ -284,21 +366,23 @@ impl Emulator {
                         0b000 => {
                             let addr = self.read_reg(typ.rs1) + typ.imm;
                             let addr = addr as usize;
-                            self.mem[addr] = self.read_reg(typ.rs2) as u8;
+                            let data = self.read_reg(typ.rs2) as u8;
+                            write_mem!(addr, u8, data);
                         },
                         // SH
                         0b001 => {
                             let addr = self.read_reg(typ.rs1) + typ.imm;
                             let addr = addr as usize;
                             let data = self.read_reg(typ.rs2) as u16;
-                            self.mem[addr..addr+2].copy_from_slice(&u16::to_le_bytes(data));
+                            write_mem!(addr, u16, data);
                         },
                         // SW
                         0b010 => {
                             let addr = self.read_reg(typ.rs1) + typ.imm;
+                            let imm = typ.imm;
                             let addr = addr as usize;
                             let data = self.read_reg(typ.rs2);
-                            self.mem[addr..addr+4].copy_from_slice(&u32::to_le_bytes(data));
+                            write_mem!(addr, u32, data);
                         },
                         _ => {
                             exit!(EmulatorExit::InvalidInstruction(instr));

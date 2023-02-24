@@ -73,6 +73,9 @@ fn main() {
             EmulatorExit::InvalidInstruction(instr) => {
                 panic!("Invalid instruction: {instr:#010x}");
             },
+            EmulatorExit::InvalidMemoryAccess { perm, addr } => {
+                panic!("Invalid memory access: couldn't {perm:?} at {addr:#010x}");
+            }
         };
     }
 
