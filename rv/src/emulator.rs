@@ -155,8 +155,8 @@ impl Emulator {
                 0b1101111 => {
                     let typ = JType::parse(instr);
                     let old_pc = pc;
-                    // offset is in multiples of 2 bytes
-                    pc = pc.overflowing_add(typ.imm).0;
+                    // offset is in multiples of 2 bytes ??
+                    pc = pc.wrapping_add(typ.imm);
                     self.write_reg(typ.rd, old_pc + 4);
                     continue;
                 },
@@ -169,7 +169,7 @@ impl Emulator {
                     }
 
                     let old_pc = pc;
-                    pc = self.read_reg(typ.rs1).overflowing_add(typ.imm).0;
+                    pc = self.read_reg(typ.rs1).wrapping_add(typ.imm);
                     self.write_reg(typ.rd, old_pc + 4);
                     continue;
 
@@ -182,42 +182,42 @@ impl Emulator {
                         // BEQ
                         0b000 => {
                             if self.read_reg(typ.rs1) == self.read_reg(typ.rs2) {
-                                pc = pc.overflowing_add(typ.imm).0;
+                                pc = pc.wrapping_add(typ.imm);
                                 continue;
                             }
                         },
                         // BNE
                         0b001 => {
                             if self.read_reg(typ.rs1) != self.read_reg(typ.rs2) {
-                                pc = pc.overflowing_add(typ.imm).0;
+                                pc = pc.wrapping_add(typ.imm);
                                 continue;
                             }
                         },
                         // BLT
                         0b100 => {
                             if (self.read_reg(typ.rs1) as i32) < self.read_reg(typ.rs2) as i32 {
-                                pc = pc.overflowing_add(typ.imm).0;
+                                pc = pc.wrapping_add(typ.imm);
                                 continue;
                             }
                         },
                         // BGE
                         0b101 => {
                             if self.read_reg(typ.rs1) as i32 >= self.read_reg(typ.rs2) as i32 {
-                                pc = pc.overflowing_add(typ.imm).0;
+                                pc = pc.wrapping_add(typ.imm);
                                 continue;
                             }
                         },
                         // BLTU
                         0b110 => {
                             if self.read_reg(typ.rs1) < self.read_reg(typ.rs2) {
-                                pc = pc.overflowing_add(typ.imm).0;
+                                pc = pc.wrapping_add(typ.imm);
                                 continue;
                             }
                         },
                         // BGEU
                         0b111 => {
                             if self.read_reg(typ.rs1) >= self.read_reg(typ.rs2) {
-                                pc = pc.overflowing_add(typ.imm).0;
+                                pc = pc.wrapping_add(typ.imm);
                                 pc = pc + typ.imm;
                                 continue;
                             }
@@ -234,14 +234,14 @@ impl Emulator {
                     match typ.funct3 {
                         // LB
                         0b000 => {
-                            let addr = self.read_reg(typ.rs1).overflowing_add(typ.imm).0;
+                            let addr = self.read_reg(typ.rs1).wrapping_add(typ.imm);
                             let addr = addr as usize;
                             let data = self.mem[addr] as i8;
                             self.write_reg(typ.rd, data as i32 as u32);
                         },
                         // LH
                         0b001 => {
-                            let addr = self.read_reg(typ.rs1).overflowing_add(typ.imm).0;
+                            let addr = self.read_reg(typ.rs1).wrapping_add(typ.imm);
                             let addr = addr as usize;
                             let data = &self.mem[addr..addr+2];
                             let data = i16::from_le_bytes(data.try_into().unwrap());
@@ -249,7 +249,7 @@ impl Emulator {
                         },
                         // LW
                         0b010 => {
-                            let addr = self.read_reg(typ.rs1).overflowing_add(typ.imm).0;
+                            let addr = self.read_reg(typ.rs1).wrapping_add(typ.imm);
                             let addr = addr as usize;
                             let data = &self.mem[addr..addr+4];
                             let data = u32::from_le_bytes(data.try_into().unwrap());
@@ -257,14 +257,14 @@ impl Emulator {
                         },
                         // LBU
                         0b100 => {
-                            let addr = self.read_reg(typ.rs1).overflowing_add(typ.imm).0;
+                            let addr = self.read_reg(typ.rs1).wrapping_add(typ.imm);
                             let addr = addr as usize;
                             let data = self.mem[addr];
                             self.write_reg(typ.rd, data as u32);
                         },
                         // LHU
                         0b101 => {
-                            let addr = self.read_reg(typ.rs1).overflowing_add(typ.imm).0;
+                            let addr = self.read_reg(typ.rs1).wrapping_add(typ.imm);
                             let addr = addr as usize;
                             let data = &self.mem[addr..addr+2];
                             let data = u16::from_le_bytes(data.try_into().unwrap());
@@ -320,7 +320,7 @@ impl Emulator {
                     match typ.funct3 {
                         // ADDI
                         0b000 => {
-                            let data = self.read_reg(typ.rs1).overflowing_add(typ.imm).0;
+                            let data = self.read_reg(typ.rs1).wrapping_add(typ.imm);
                             self.write_reg(typ.rd, data);
                         },
                         // SLTI
@@ -396,13 +396,13 @@ impl Emulator {
                         (0b000, 0b0000000) => {
                             let rs1 = self.read_reg(typ.rs1);
                             let rs2 = self.read_reg(typ.rs2);
-                            self.write_reg(typ.rd, rs1.overflowing_add(rs2).0);
+                            self.write_reg(typ.rd, rs1.wrapping_add(rs2));
                         },
                         // SUB
                         (0b000, 0b0100000) => {
                             let rs1 = self.read_reg(typ.rs1);
                             let rs2 = self.read_reg(typ.rs2);
-                            self.write_reg(typ.rd, rs1.overflowing_sub(rs2).0);
+                            self.write_reg(typ.rd, rs1.wrapping_add(rs2));
                         },
                         // SLL
                         (0b001, 0b0000000) => {
