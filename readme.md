@@ -23,3 +23,10 @@ return: a0 (x10)
 numbers: https://jborza.com/post/2021-05-11-riscv-linux-syscalls/
 
 porting newlib guide: <https://www.embecosm.com/appnotes/ean9/ean9-howto-newlib-1.0.html#sec_sbrk>
+
+## riscv ps abi
+
+args: a0-a6
+ret: a0-a1
+
+https://github.com/riscv-non-isa/riscv-elf-psabi-doc
