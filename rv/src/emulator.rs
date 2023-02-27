@@ -365,26 +365,23 @@ impl Emulator {
                 // STORE
                 0b0100011 => {
                     let typ = SType::parse(instr);
+
+                    let addr = self.read_reg(typ.rs1) + typ.imm;
+                    let addr = addr as usize;
+
                     match typ.funct3 {
                         // SB
                         0b000 => {
-                            let addr = self.read_reg(typ.rs1) + typ.imm;
-                            let addr = addr as usize;
                             let data = self.read_reg(typ.rs2) as u8;
                             write_mem!(addr, u8, data);
                         },
                         // SH
                         0b001 => {
-                            let addr = self.read_reg(typ.rs1) + typ.imm;
-                            let addr = addr as usize;
                             let data = self.read_reg(typ.rs2) as u16;
                             write_mem!(addr, u16, data);
                         },
                         // SW
                         0b010 => {
-                            let addr = self.read_reg(typ.rs1) + typ.imm;
-                            let imm = typ.imm;
-                            let addr = addr as usize;
                             let data = self.read_reg(typ.rs2);
                             write_mem!(addr, u32, data);
                         },
