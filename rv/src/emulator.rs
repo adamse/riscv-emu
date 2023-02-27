@@ -66,9 +66,6 @@ impl Emulator {
         for segment in &elf.load_segments {
             let start = segment.load_address as usize;
             let file_end = start + segment.file_size as usize;
-            let mem_end = start + segment.size as usize;
-
-            println!("loading segment: {:08x}-{:08x}-{:08x} {:?}", start, file_end, mem_end, segment.flags);
 
             mem[start..file_end].copy_from_slice(&segment.data);
 
@@ -77,9 +74,15 @@ impl Emulator {
                 if segment.flags.w() { Perms::Write as u8 } else { 0 } |
                 if segment.flags.x() { Perms::Exec as u8 } else { 0 };
 
+            let mem_end = start + segment.size as usize;
+            // align up to next word
+            let mem_end = (mem_end + 4) & !3;
+
             for i in start..mem_end {
                 perms[i] = perm;
             }
+
+            println!("loading segment: {:08x}-{:08x}-{:08x} {:?}", start, file_end, mem_end, segment.flags);
         }
 
         let mut regs = [0; 31];
