@@ -490,7 +490,7 @@ impl Emulator {
                         (0b000, 0b0100000) => {
                             let rs1 = self.read_reg(typ.rs1);
                             let rs2 = self.read_reg(typ.rs2);
-                            self.write_reg(typ.rd, rs1.wrapping_add(rs2));
+                            self.write_reg(typ.rd, rs1.wrapping_sub(rs2));
                         },
                         // SLL
                         (0b001, 0b0000000) => {
