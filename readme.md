@@ -30,3 +30,16 @@ args: a0-a6
 ret: a0-a1
 
 https://github.com/riscv-non-isa/riscv-elf-psabi-doc
+
+## linux entry point calling convention
+
+article describing the protocol for handing information to the entry point: https://lwn.net/Articles/631631/
+
+
+```
+stack:
+[aux vector; A]
+[env vector; B]
+[arg vector; C]
+arg count
+```
