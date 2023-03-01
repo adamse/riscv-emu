@@ -15,13 +15,10 @@ fn main() {
 
     let mut emu = Emulator::new(&elf);
 
-    // find the first free memory address after all the segments loaded from the elf
-    let end_of_elf_loads =
-        elf.load_segments.iter()
-        .map(|segment| segment.load_address + segment.size)
-        .max().unwrap_or(0);
+    let heap_size = 2 * 1024 * 1024;
+    let (heap_start, heap_end) = emu.mem.allocate(heap_size, PERM_READ | PERM_WRITE).unwrap();
 
-    let mut brk = end_of_elf_loads;
+    let mut current_brk = heap_start;
 
     loop {
         let res = emu.run();
@@ -40,18 +37,21 @@ fn main() {
                     },
                     // brk / long sys_brk(unsigned long brk)
                     214 => {
+                        // However, the actual Linux system call returns the new program break  on
+                        // success.   On  failure, the system call returns the current break.
+
                         let arg0 = emu.read_reg(Reg(10));
-                        println!("brk {arg0}");
+                        println!("brk {arg0:08x}");
+
                         if arg0 == 0 {
-                            // return current brk
-                            emu.write_reg(Reg(10), brk);
-                            panic!("brk: {arg0}");
+                        } else if arg0 > heap_end {
+                            // todo do something about oom?
                         } else {
-                            // update brk if possible
-                            brk = arg0;
-                            emu.write_reg(Reg(10), brk);
-                            panic!("brk: {arg0}");
-                        }
+                            current_brk = arg0;
+                        };
+
+                        emu.write_reg(Reg(10), current_brk);
+
                     },
                     x => {
                         let arg0 = emu.read_reg(Reg(10));
@@ -71,10 +71,11 @@ fn main() {
                 panic!("Unhandled break");
             },
             EmulatorExit::InvalidInstruction(instr) => {
-                panic!("Invalid instruction: {instr:#010x}");
+                let pc = emu.pc;
+                panic!("Invalid instruction: 0x{pc:08x} {instr:#010x}");
             },
-            EmulatorExit::InvalidMemoryAccess { perm, addr } => {
-                panic!("Invalid memory access: couldn't {perm:?} at {addr:#010x}");
+            EmulatorExit::InvalidMemoryAccess(err) => {
+                panic!("Invalid memory access: {err:08x?}");
             }
         };
     }

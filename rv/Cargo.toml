@@ -7,3 +7,4 @@ edition = "2021"
 
 [dependencies]
 elf = { version = "0.1.0", path = "../elf" }
+rangeset = { version = "0.1.0", path = "../rangeset" }

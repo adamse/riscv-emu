@@ -1,45 +1,180 @@
-use std::io::Write;
+// use std::io::Write;
+use std::ops::Range;
 
 use elf::Elf;
+
+use rangeset::RangeSet;
 
 use crate::instructions::*;
 use crate::disassemble::*;
 
 const TRACE: bool = false;
 
-#[derive(Debug, Clone, Copy)]
-#[repr(u8)]
-pub enum Perms {
-    /// No permissions
-    None = 0,
+pub const PERM_NONE: u8 = 0b0;
+pub const PERM_READ: u8 = 0b1;
+pub const PERM_WRITE: u8 = 0b10;
+pub const PERM_EXEC: u8 = 0b100;
 
-    /// Read
-    Read = 0b1,
+// const PERM_RAW: u32 = 0b1010
 
-    /// Write
-    Write = 0b10,
-
-    /// Executable
-    Exec = 0b100,
-
-    /// Read after write
-    ReadAfterWrite = 0b1000,
+fn test_perm(permission: u8, byte: u8) -> bool {
+    (permission & byte) != 0
 }
 
-impl Perms {
-    fn test(self, byte: u8) -> bool {
-        ((self as u8) & byte) != 0
+#[derive(Debug)]
+pub enum MemoryError {
+    BadPermissions {
+        addr: Range<u32>,
+        perm: u8,
+        expected: u8,
+        given: u8,
+    },
+    OutOfBounds {
+        addr: Range<u32>
+    },
+    OutOfMemory {
+    },
+}
+
+#[derive(Debug)]
+pub struct Memory {
+    pub mem: Box<[u8]>,
+    pub perms: Box<[u8]>,
+    pub free: RangeSet,
+}
+
+macro_rules! readu_impl {
+    ($name:ident, $ty:ty) => {
+        pub fn $name(&self, addr: u32, perm: u8) -> Result<u32, MemoryError> {
+            const SIZE: usize = std::mem::size_of::<$ty>();
+
+            let slice = self.read(addr..addr+(SIZE as u32), perm)?;
+
+            Ok(<$ty>::from_le_bytes(slice.try_into().unwrap()) as u32)
+        }
     }
+}
+
+macro_rules! readi_impl {
+    ($name:ident, $ty:ty) => {
+        pub fn $name(&self, addr: u32, perm: u8) -> Result<u32, MemoryError> {
+            const SIZE: usize = std::mem::size_of::<$ty>();
+
+            let slice = self.read(addr..addr+(SIZE as u32), perm)?;
+
+            Ok(<$ty>::from_le_bytes(slice.try_into().unwrap()) as i32 as u32)
+        }
+    }
+}
+
+macro_rules! write_impl {
+    ($name:ident, $ty:ty) => {
+        pub fn $name(&mut self, addr: u32, perm: u8, val: $ty) -> Result<(), MemoryError> {
+            self.write(addr, perm, &<$ty>::to_le_bytes(val))
+        }
+    }
+}
+
+impl Memory {
+    pub fn new(size: usize) -> Self {
+        let mem = Box::new_zeroed_slice(size);
+        let mem = unsafe { mem.assume_init() };
+
+        let perms = Box::new_zeroed_slice(size);
+        let perms = unsafe { perms.assume_init() };
+
+        Memory {
+            mem,
+            perms,
+            free: RangeSet::new(0, size as u32),
+        }
+    }
+
+    pub fn allocate(&mut self, size: u32, perms: u8) -> Result<(u32, u32), MemoryError> {
+        let (start, end) = self.free.remove_first_fit(size).map_err(|_| MemoryError::OutOfMemory{})?;
+        self.set_permissions(start..end, perms)?;
+        Ok((start, end))
+    }
+
+    fn check_bounds(&self, range: Range<u32>) -> Result<(), MemoryError> {
+        if range.start as usize >= self.mem.len() || range.end as usize >= self.mem.len() {
+            return Err(MemoryError::OutOfBounds {
+                addr: range
+            });
+        }
+
+        Ok(())
+    }
+
+    pub fn set_permissions(&mut self, range: Range<u32>, perm: u8) -> Result<(), MemoryError> {
+        self.check_bounds(range.clone())?;
+
+        for ii in range {
+            self.perms[ii as usize] = perm;
+        }
+
+        Ok(())
+    }
+
+    pub fn check_permission(&self, range: Range<u32>, perm: u8) -> Result<(), MemoryError> {
+        for addr in range.clone() {
+            let byte = self.perms[addr as usize];
+            if !test_perm(perm, byte) {
+                return Err(MemoryError::BadPermissions {
+                    addr: range,
+                    perm,
+                    expected: perm as u8,
+                    given: byte,
+                });
+            }
+        }
+
+        Ok(())
+    }
+
+    pub fn read(&self, range: Range<u32>, perm: u8) -> Result<&[u8], MemoryError> {
+        self.check_bounds(range.clone())?;
+
+        if !matches!(perm, PERM_NONE) {
+            self.check_permission(range.clone(), perm)?;
+        }
+
+        // println!("{:08x?}", range.clone());
+        // dbg!(&self.mem[range.start as usize..range.end as usize]);
+        Ok(&self.mem[range.start as usize..range.end as usize])
+    }
+
+    readu_impl!(read_u8, u8);
+    readu_impl!(read_u16, u16);
+    readu_impl!(read_u32, u32);
+    readi_impl!(read_i8, i8);
+    readi_impl!(read_i16, i16);
+
+    pub fn write(&mut self, addr: u32, perm: u8, data: &[u8]) -> Result<(), MemoryError> {
+        let range = addr..data.len() as u32;
+
+        self.check_bounds(range.clone())?;
+
+        if perm != 0 {
+            self.check_permission(range, perm)?;
+        }
+
+        self.mem[addr as usize..addr as usize + data.len()].copy_from_slice(data);
+
+        Ok(())
+    }
+
+    write_impl!(write_u8, u8);
+    write_impl!(write_u16, u16);
+    write_impl!(write_u32, u32);
+
 }
 
 #[derive(Debug)]
 pub struct Emulator {
     pub pc: u32,
-    regs: [u32; 31],
-    pub mem: Box<[u8]>,
-
-    // memory permissions
-    pub perms: Box<[u8]>,
+    pub regs: [u32; 31],
+    pub mem: Memory,
 }
 
 #[derive(Debug)]
@@ -47,56 +182,56 @@ pub enum EmulatorExit {
     Syscall,
     Break,
     InvalidInstruction(u32),
-    InvalidMemoryAccess {
-        perm: Perms,
-        addr: u32
-    },
+    InvalidMemoryAccess(MemoryError),
 }
 
 impl Emulator {
     pub fn new(elf: &Elf) -> Self {
         // 25 mb
         let size = 25 * 1024 * 1024;
-        let mem = Box::new_zeroed_slice(size);
-        let mut mem = unsafe { mem.assume_init() };
-
-        let perms = Box::new_zeroed_slice(size);
-        let mut perms = unsafe { perms.assume_init() };
+        let mut mem = Memory::new(size);
 
         for segment in &elf.load_segments {
-            let start = segment.load_address as usize;
-            let file_end = start + segment.file_size as usize;
+            println!("here");
+            let start = segment.load_address;
+            let file_end = start + segment.file_size;
 
-            mem[start..file_end].copy_from_slice(&segment.data);
+            mem.write(start, PERM_NONE, &segment.data).unwrap();
 
             let perm =
-                if segment.flags.r() { Perms::Read as u8 } else { 0 } |
-                if segment.flags.w() { Perms::Write as u8 } else { 0 } |
-                if segment.flags.x() { Perms::Exec as u8 } else { 0 };
+                if segment.flags.r() { PERM_READ } else { 0 } |
+                if segment.flags.w() { PERM_WRITE } else { 0 } |
+                if segment.flags.x() { PERM_EXEC } else { 0 };
 
-            let mem_end = start + segment.size as usize;
+            let mem_end = start + segment.size;
             // align up to next word
             let mem_end = (mem_end + 4) & !3;
 
-            for i in start..mem_end {
-                perms[i] = perm;
-            }
+            // remove this range from free memory
+            mem.free.remove(start, mem_end).unwrap();
+            // set the permissions as the elf specifies
+            mem.set_permissions(start..mem_end, perm).unwrap();
 
             println!("loading segment: {:08x}-{:08x}-{:08x} {:?}", start, file_end, mem_end, segment.flags);
         }
 
-        let mut regs = [0; 31];
-
-        // allocate an initial stack
-        // 2M at the end of memory
-        regs[1] = (mem.len() - 2*1024*1024) as u32;
-
-        Emulator {
+        let regs = [0; 31];
+        let mut emu = Emulator {
             pc: elf.entry,
             regs,
             mem,
-            perms
-        }
+        };
+
+        // allocate an initial stack
+        let stack_size = 1 * 1024 * 1096;
+        // TODO: make the stack read-after-write
+        let (stack_start, stack_end) = emu.mem.allocate(stack_size, PERM_READ | PERM_WRITE).unwrap();
+
+        emu.write_reg(RegName::Sp.as_reg(), stack_start as u32);
+
+        println!("allocated stack: {:08x}-{:08x}", stack_start, stack_end);
+
+        emu
     }
 
     pub fn write_reg(&mut self, reg: Reg, val: u32) {
@@ -180,47 +315,18 @@ impl Emulator {
                 break;
             }
         }
-        'main: loop {
 
-            macro_rules! read_mem {
-                ($addr:expr, $ty:ty) => {{
-                    const SIZE: usize = std::mem::size_of::<$ty>();
+        'next_instruction: loop {
 
-                    // check permissions
-                    for i in 0..SIZE {
-                        if !Perms::Read.test(self.perms[$addr + i]) {
-                            ret = EmulatorExit::InvalidMemoryAccess {
-                                perm: Perms::Read,
-                                addr: ($addr + i) as u32
-                            };
-                            break 'main;
-                        }
-                    }
+            let instr =
+                self.mem.read_u32(pc, PERM_EXEC);
+            let instr = match instr {
+                Err(memerr) => exit!(EmulatorExit::InvalidMemoryAccess(memerr)),
+                Ok(instr) => instr,
+            };
 
-                    <$ty>::from_le_bytes(self.mem[$addr..$addr + SIZE].try_into().unwrap())
-                }}
             }
 
-            macro_rules! write_mem {
-                ($addr:expr, $ty:ty, $data:expr) => {{
-                    const SIZE: usize = std::mem::size_of::<$ty>();
-
-                    // check permissions
-                    for i in 0..SIZE {
-                        if !Perms::Write.test(self.perms[$addr + i]) {
-                            ret = EmulatorExit::InvalidMemoryAccess {
-                                perm: Perms::Write,
-                                addr: ($addr + i) as u32
-                            };
-                            break 'main;
-                        }
-                    }
-                    self.mem[$addr..$addr + SIZE].copy_from_slice(&<$ty>::to_le_bytes($data));
-                }}
-            }
-
-            let instr = self.mem[pc as usize..pc as usize + 4].try_into().unwrap();
-            let instr = u32::from_le_bytes(instr);
 
             if TRACE {
                 self.trace_print(pc);
@@ -250,7 +356,7 @@ impl Emulator {
                     // offset is in multiples of 2 bytes ??
                     pc = pc.wrapping_add(typ.imm);
                     self.write_reg(typ.rd, old_pc + 4);
-                    continue;
+                    continue 'next_instruction;
                 },
                 // JALR
                 0b1100111 => {
@@ -263,7 +369,7 @@ impl Emulator {
                     let old_pc = pc;
                     pc = self.read_reg(typ.rs1).wrapping_add(typ.imm);
                     self.write_reg(typ.rd, old_pc + 4);
-                    continue;
+                    continue 'next_instruction;
 
                 },
 
@@ -323,46 +429,30 @@ impl Emulator {
                 // LOAD
                 0b0000011 => {
                     let typ = IType::parse(instr);
-                    match typ.funct3 {
+
+                    let addr = self.read_reg(typ.rs1).wrapping_add(typ.imm);
+
+                    let data = match typ.funct3 {
                         // LB
-                        0b000 => {
-                            let addr = self.read_reg(typ.rs1).wrapping_add(typ.imm);
-                            let addr = addr as usize;
-                            let data = read_mem!(addr, i8);
-                            self.write_reg(typ.rd, data as i32 as u32);
-                        },
+                        0b000 => self.mem.read_i8(addr, PERM_READ),
                         // LH
-                        0b001 => {
-                            let addr = self.read_reg(typ.rs1).wrapping_add(typ.imm);
-                            let addr = addr as usize;
-                            let data = read_mem!(addr, i16);
-                            self.write_reg(typ.rd, data as i32 as u32);
-                        },
+                        0b001 => self.mem.read_i16(addr, PERM_READ),
                         // LW
-                        0b010 => {
-                            let addr = self.read_reg(typ.rs1).wrapping_add(typ.imm);
-                            let addr = addr as usize;
-                            let data = read_mem!(addr, u32);
-                            self.write_reg(typ.rd, data);
-                        },
+                        0b010 => self.mem.read_u32(addr, PERM_READ),
                         // LBU
-                        0b100 => {
-                            let addr = self.read_reg(typ.rs1).wrapping_add(typ.imm);
-                            let addr = addr as usize;
-                            let data = read_mem!(addr, u8);
-                            self.write_reg(typ.rd, data as u32);
-                        },
+                        0b100 => self.mem.read_u8(addr, PERM_READ),
                         // LHU
-                        0b101 => {
-                            let addr = self.read_reg(typ.rs1).wrapping_add(typ.imm);
-                            let addr = addr as usize;
-                            let data = read_mem!(addr, u16);
-                            self.write_reg(typ.rd, data as u32);
-                        },
+                        0b101 => self.mem.read_u16(addr, PERM_READ),
                         _ => {
                             exit!(EmulatorExit::InvalidInstruction(instr));
                         },
                     };
+                    match data {
+                        Err(memerr) =>
+                            exit!(EmulatorExit::InvalidMemoryAccess(memerr)),
+                        Ok(data) =>
+                            self.write_reg(typ.rd, data as i32 as u32),
+                    }
                 },
 
                 // STORE
@@ -370,28 +460,25 @@ impl Emulator {
                     let typ = SType::parse(instr);
 
                     let addr = self.read_reg(typ.rs1) + typ.imm;
-                    let addr = addr as usize;
+                    let data = self.read_reg(typ.rs2);
 
-                    match typ.funct3 {
+                    let res = match typ.funct3 {
                         // SB
-                        0b000 => {
-                            let data = self.read_reg(typ.rs2) as u8;
-                            write_mem!(addr, u8, data);
-                        },
+                        0b000 => self.mem.write_u8(addr, PERM_WRITE, data as u8),
+
                         // SH
-                        0b001 => {
-                            let data = self.read_reg(typ.rs2) as u16;
-                            write_mem!(addr, u16, data);
-                        },
+                        0b001 => self.mem.write_u16(addr, PERM_WRITE, data as u16),
+
                         // SW
-                        0b010 => {
-                            let data = self.read_reg(typ.rs2);
-                            write_mem!(addr, u32, data);
-                        },
-                        _ => {
-                            exit!(EmulatorExit::InvalidInstruction(instr));
-                        },
+                        0b010 => self.mem.write_u32(addr, PERM_WRITE, data as u32),
+
+                        _ => exit!(EmulatorExit::InvalidInstruction(instr)),
                     };
+
+                    match res {
+                        Err(memerr) => exit!(EmulatorExit::InvalidMemoryAccess(memerr)),
+                        Ok(()) => (),
+                    }
                 }
 
                 // OP-IMM
