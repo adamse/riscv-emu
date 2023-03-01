@@ -32,6 +32,8 @@ fn main() {
     let heap_size = 2 * 1024 * 1024;
     let (heap_start, heap_end) = emu.mem.allocate(heap_size, PERM_READ | PERM_WRITE).unwrap();
 
+    println!("allocated heap:  {heap_start:08x}-{heap_end:08x}");
+
     // store the current "end of heap" as the program believes it to be
     let mut current_brk = heap_start;
 
@@ -43,7 +45,7 @@ fn main() {
             EmulatorExit::Syscall => {
                 // sycall no is in a7/x17
                 let syscall_no = emu.read_reg(Reg(17));
-                println!("Syscall no: {syscall_no}");
+                println!("syscall: {syscall_no}");
                 match syscall_no {
                     // read long sys_write(unsigned int fd, const char __user *buf, size_t count);
                     64 => {
@@ -68,8 +70,10 @@ fn main() {
                     }
                     // fstat / newfstat(unsigned int fd, struct stat __user *statbuf)
                     80 => {
+                        let fd = emu.read_reg(Reg(10));
+                        let buf = emu.read_reg(Reg(11));
+                        println!("fstat({fd}, {buf:08x})");
                         // just return ok
-                            // panic!("fstat");
                         emu.write_reg(Reg(10), 0);
                     },
                     // brk / long sys_brk(unsigned long brk)
@@ -78,7 +82,7 @@ fn main() {
                         // success.   On  failure, the system call returns the current break.
 
                         let new_brk = emu.read_reg(Reg(10));
-                        println!("brk {new_brk:08x}");
+                        println!("brk({new_brk:08x})");
 
                         if new_brk == 0 {
                         } else if new_brk > heap_end {
