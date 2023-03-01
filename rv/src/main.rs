@@ -56,14 +56,14 @@ fn main() {
                         // However, the actual Linux system call returns the new program break  on
                         // success.   On  failure, the system call returns the current break.
 
-                        let arg0 = emu.read_reg(Reg(10));
-                        println!("brk {arg0:08x}");
+                        let new_brk = emu.read_reg(Reg(10));
+                        println!("brk {new_brk:08x}");
 
-                        if arg0 == 0 {
-                        } else if arg0 > heap_end {
+                        if new_brk == 0 {
+                        } else if new_brk > heap_end {
                             // todo do something about oom?
                         } else {
-                            current_brk = arg0;
+                            current_brk = new_brk;
                         };
 
                         emu.write_reg(Reg(10), current_brk);
