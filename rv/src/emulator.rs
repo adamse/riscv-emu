@@ -332,6 +332,38 @@ impl Emulator {
                 println!("");
             }
 
+            // before bzero bss
+            if pc == 0x000100ec {
+                println!("start: {:08x}, end: {:08x}, len: {:}",
+                    self.read_reg(RegName::A0.as_reg()),
+                    self.read_reg(RegName::A2.as_reg()),
+                    self.read_reg(RegName::A2.as_reg()) - self.read_reg(RegName::A0.as_reg())
+                )
+            }
+
+            let in_memset = pc >= 0x00010258 && pc <= 0x10330;
+
+            // memset
+            if false && pc == 0x00010258 {
+                println!("calling memset:");
+                self.trace_print2(pc);
+                disassemble_one(pc as u32, instr, true);
+                println!("");
+            }
+
+            // memset sw loop start
+            if false && pc == 0x1027c {
+                println!("loop: {:010x}", self.read_reg(RegName::A4.as_reg()));
+
+            }
+            // memset sw loop condition
+            if false && pc == 0x10290 {
+                disassemble_one(pc, instr, true);
+                println!("loopcond: {:08x} {:08x}",
+                    self.read_reg(RegName::A3.as_reg()),
+                    self.read_reg(RegName::A4.as_reg()));
+            }
+
             // first 7 bits are the opcode
             let opcode: u32 = instr & ((1 << 7) - 1);
 
@@ -438,6 +470,11 @@ impl Emulator {
 
                     let addr = self.read_reg(typ.rs1) + typ.imm;
                     let data = self.read_reg(typ.rs2);
+
+                    if false && in_memset {
+                        disassemble_one(pc, instr, true);
+                        println!("store addr: {:08x}", addr);
+                    }
 
                     let res = match typ.funct3 {
                         // SB
