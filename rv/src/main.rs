@@ -45,6 +45,27 @@ fn main() {
                 let syscall_no = emu.read_reg(Reg(17));
                 println!("Syscall no: {syscall_no}");
                 match syscall_no {
+                    // read long sys_write(unsigned int fd, const char __user *buf, size_t count);
+                    64 => {
+                        let fd = emu.read_reg(Reg(10));
+                        let buf = emu.read_reg(Reg(11));
+                        let count = emu.read_reg(Reg(12));
+
+                        println!("write({fd}, {buf:08x}, {count})");
+
+                        let ret = if fd == 1 || fd == 2 {
+                            // stdout or stderr
+                            let bytes = emu.mem.read(buf..buf+count, PERM_READ).unwrap();
+                            let string = String::from_utf8_lossy(bytes);
+                            println!("output: {bytes:x?}");
+                            println!("output: {string}");
+                            0
+                        } else {
+                            !1 // TODO: right return for write ??
+                        };
+
+                        emu.write_reg(Reg(10), ret);
+                    }
                     // fstat / newfstat(unsigned int fd, struct stat __user *statbuf)
                     80 => {
                         // just return ok
