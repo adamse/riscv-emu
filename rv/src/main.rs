@@ -19,10 +19,23 @@ fn main() {
     // allocate an initial stack
 
     let stack_size = 1 * 1024 * 1096;
-    // TODO: make the stack read-after-write
-    let (stack_start, stack_end) = emu.mem.allocate(stack_size, PERM_READ | PERM_WRITE).unwrap();
+    let (stack_start, stack_end) = emu.mem.allocate(stack_size, PERM_RAW | PERM_WRITE).unwrap();
 
     emu.write_reg(RegName::Sp.as_reg(), stack_start as u32);
+    // stack layout:
+    // aux vector, null terminated
+    // env vector, null terminated
+    // arg vector, null terminated
+    // argc
+    let init = &[
+        0, 0, 0, 0, // aux vector
+        0, 0, 0, 0, // env vector
+        0, 0, 0, 0, // arg vector
+        0, 0, 0, 0, // argc
+    ];
+    // TODO: progname in argv[0]
+    // TODO: alignment??
+    emu.mem.write(stack_start, PERM_WRITE, init).unwrap();
 
     println!("allocated stack: {:08x}-{:08x}", stack_start, stack_end);
 
@@ -30,7 +43,7 @@ fn main() {
     // allocate a heap
 
     let heap_size = 2 * 1024 * 1024;
-    let (heap_start, heap_end) = emu.mem.allocate(heap_size, PERM_READ | PERM_WRITE).unwrap();
+    let (heap_start, heap_end) = emu.mem.allocate(heap_size, PERM_RAW | PERM_WRITE).unwrap();
 
     println!("allocated heap:  {heap_start:08x}-{heap_end:08x}");
 

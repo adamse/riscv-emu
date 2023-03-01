@@ -11,11 +11,15 @@ use crate::disassemble::*;
 const TRACE: bool = false;
 
 pub const PERM_NONE: u8 = 0b0;
+
 pub const PERM_READ: u8 = 0b1;
+
 pub const PERM_WRITE: u8 = 0b10;
+
 pub const PERM_EXEC: u8 = 0b100;
 
-// const PERM_RAW: u32 = 0b1010
+/// Read after write
+pub const PERM_RAW: u8 = 0b1000;
 
 fn test_perm(permission: u8, byte: u8) -> bool {
     (permission & byte) != 0
@@ -25,9 +29,8 @@ fn test_perm(permission: u8, byte: u8) -> bool {
 pub enum MemoryError {
     BadPermissions {
         addr: Range<u32>,
-        perm: u8,
-        expected: u8,
-        given: u8,
+        access: u8,
+        perms: u8,
     },
     OutOfBounds {
         addr: Range<u32>
@@ -129,9 +132,8 @@ impl Memory {
             if !test_perm(perm, byte) {
                 return Err(MemoryError::BadPermissions {
                     addr: range,
-                    perm,
-                    expected: perm as u8,
-                    given: byte,
+                    access: perm as u8,
+                    perms: byte,
                 });
             }
         }
@@ -158,12 +160,22 @@ impl Memory {
     readi_impl!(read_i16, i16);
 
     pub fn write(&mut self, addr: u32, perm: u8, data: &[u8]) -> Result<(), MemoryError> {
-        let range = addr..data.len() as u32;
+        let range = addr..addr+data.len() as u32;
 
         self.check_bounds(range.clone())?;
 
         if perm != 0 {
-            self.check_permission(range, perm)?;
+            self.check_permission(range.clone(), perm)?;
+        }
+
+        // reset the RAW bit and set the READ bit
+        for ii in range {
+            let mut perm = self.perms[ii as usize];
+            if perm & PERM_RAW != 0 {
+                perm &= !PERM_RAW;
+                perm |= PERM_READ;
+                self.perms[ii as usize] = perm;
+            }
         }
 
         self.mem[addr as usize..addr as usize + data.len()].copy_from_slice(data);
