@@ -1,7 +1,7 @@
 
 #[derive(Debug)]
 pub enum Error {
-    OutOfBounds,
+    BadRange,
     NoFit,
 }
 
@@ -37,7 +37,7 @@ impl RangeSet {
 
         let Some((ii, range)) = range else {
             // TODO: better error
-            return Err(Error::OutOfBounds);
+            return Err(Error::BadRange);
         };
 
         if start == range.0 && end == range.1 {
@@ -76,7 +76,7 @@ impl RangeSet {
 
     /// Insert a range into the set
     ///
-    pub fn insert(&mut self, start: u32, end: u32) -> Result<(), Error> {
+    pub fn insert(&mut self, _start: u32, _end: u32) -> Result<(), Error> {
         // find the place to insert the range
         //
         // New range cases:

@@ -38,11 +38,10 @@ pub fn disassemble_one(addr: u32, instr: u32, abi_name: bool) {
             assert!(typ.funct3 == 0,
                 "JALR should have funct3 == 0");
 
-            println!("jalr {}, {}, rel={}, abs={}",
+            println!("jalr {}, {}, rel={}",
                 typ.rd.name2(abi_name),
                 typ.rs1.name2(abi_name),
-                typ.imm as i32,
-                (addr as i32 + typ.imm as i32) as u32);
+                typ.imm as i32)
         },
 
         // BRANCH

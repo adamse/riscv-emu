@@ -13,12 +13,28 @@ use elf::Elf;
 fn main() {
     let elf = Elf::load("../test/test").unwrap();
 
-    let mut emu = Emulator::new(&elf);
+    let mut emu = Emulator::new(25*1024*1024);
+    emu.load(&elf).unwrap();
+
+    // allocate an initial stack
+
+    let stack_size = 1 * 1024 * 1096;
+    // TODO: make the stack read-after-write
+    let (stack_start, stack_end) = emu.mem.allocate(stack_size, PERM_READ | PERM_WRITE).unwrap();
+
+    emu.write_reg(RegName::Sp.as_reg(), stack_start as u32);
+
+    println!("allocated stack: {:08x}-{:08x}", stack_start, stack_end);
+
+
+    // allocate a heap
 
     let heap_size = 2 * 1024 * 1024;
     let (heap_start, heap_end) = emu.mem.allocate(heap_size, PERM_READ | PERM_WRITE).unwrap();
 
+    // store the current "end of heap" as the program believes it to be
     let mut current_brk = heap_start;
+
 
     loop {
         let res = emu.run();

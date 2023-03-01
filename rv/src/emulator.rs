@@ -33,7 +33,14 @@ pub enum MemoryError {
         addr: Range<u32>
     },
     OutOfMemory {
+        err: rangeset::Error,
     },
+}
+
+impl MemoryError {
+    pub fn from_range_error(err: rangeset::Error) -> Self {
+        MemoryError::OutOfMemory { err }
+    }
 }
 
 #[derive(Debug)]
@@ -76,22 +83,22 @@ macro_rules! write_impl {
 }
 
 impl Memory {
-    pub fn new(size: usize) -> Self {
-        let mem = Box::new_zeroed_slice(size);
+    pub fn new(size: u32) -> Self {
+        let mem = Box::new_zeroed_slice(size as usize);
         let mem = unsafe { mem.assume_init() };
 
-        let perms = Box::new_zeroed_slice(size);
+        let perms = Box::new_zeroed_slice(size as usize);
         let perms = unsafe { perms.assume_init() };
 
         Memory {
             mem,
             perms,
-            free: RangeSet::new(0, size as u32),
+            free: RangeSet::new(0, size),
         }
     }
 
     pub fn allocate(&mut self, size: u32, perms: u8) -> Result<(u32, u32), MemoryError> {
-        let (start, end) = self.free.remove_first_fit(size).map_err(|_| MemoryError::OutOfMemory{})?;
+        let (start, end) = self.free.remove_first_fit(size).map_err(MemoryError::from_range_error)?;
         self.set_permissions(start..end, perms)?;
         Ok((start, end))
     }
@@ -186,17 +193,24 @@ pub enum EmulatorExit {
 }
 
 impl Emulator {
-    pub fn new(elf: &Elf) -> Self {
-        // 25 mb
-        let size = 25 * 1024 * 1024;
-        let mut mem = Memory::new(size);
+    pub fn new(memory_size: u32) -> Self {
+
+
+        Emulator {
+            pc: 0,
+            regs: [0; 31],
+            mem: Memory::new(memory_size),
+        }
+    }
+
+    pub fn load(&mut self, elf: &Elf) -> Result<(), MemoryError> {
+        self.pc = elf.entry;
 
         for segment in &elf.load_segments {
-            println!("here");
             let start = segment.load_address;
             let file_end = start + segment.file_size;
 
-            mem.write(start, PERM_NONE, &segment.data).unwrap();
+            self.mem.write(start, PERM_NONE, &segment.data)?;
 
             let perm =
                 if segment.flags.r() { PERM_READ } else { 0 } |
@@ -208,30 +222,15 @@ impl Emulator {
             let mem_end = (mem_end + 4) & !3;
 
             // remove this range from free memory
-            mem.free.remove(start, mem_end).unwrap();
+            self.mem.free.remove(start, mem_end).map_err(MemoryError::from_range_error)?;
+
             // set the permissions as the elf specifies
-            mem.set_permissions(start..mem_end, perm).unwrap();
+            self.mem.set_permissions(start..mem_end, perm)?;
 
             println!("loading segment: {:08x}-{:08x}-{:08x} {:?}", start, file_end, mem_end, segment.flags);
         }
 
-        let regs = [0; 31];
-        let mut emu = Emulator {
-            pc: elf.entry,
-            regs,
-            mem,
-        };
-
-        // allocate an initial stack
-        let stack_size = 1 * 1024 * 1096;
-        // TODO: make the stack read-after-write
-        let (stack_start, stack_end) = emu.mem.allocate(stack_size, PERM_READ | PERM_WRITE).unwrap();
-
-        emu.write_reg(RegName::Sp.as_reg(), stack_start as u32);
-
-        println!("allocated stack: {:08x}-{:08x}", stack_start, stack_end);
-
-        emu
+        Ok(())
     }
 
     pub fn write_reg(&mut self, reg: Reg, val: u32) {
@@ -248,25 +247,27 @@ impl Emulator {
         }
     }
 
+    /*
     /// write current instruction and register state to the trace file
     ///
     /// A trace record is (1 + 1 + 31) * 4 bytes long (instruction, pc, general purpose registers)
     fn trace_binary(&self, pc: u32, file: &mut std::fs::File) {
         // write the instruction to the trace
         let instr = &self.mem[pc as usize..][..4];
-        file.write_all(instr);
+        file.write_all(instr).unwrap();
 
         // write pc to the trace
         let pc = pc.to_le_bytes();
-        file.write_all(&pc[..]);
+        file.write_all(&pc[..]).unwrap();
 
         // write all the other registers to the trace
         let regs = &self.regs as *const u32 as *const u8;
         let regs = unsafe {
             std::slice::from_raw_parts(regs, self.regs.len() * std::mem::size_of::<u32>())
         };
-        file.write_all(regs);
+        file.write_all(regs).unwrap();
     }
+    */
 
     fn trace_print2(&self, pc: u32) {
         print!("  pc {pc:#010x}");
@@ -310,10 +311,10 @@ impl Emulator {
         let mut pc = self.pc;
 
         macro_rules! exit {
-            ($ret:expr) => {
+            ($ret:expr) => {{
                 ret = $ret;
                 break;
-            }
+            }}
         }
 
         'next_instruction: loop {
@@ -325,13 +326,10 @@ impl Emulator {
                 Ok(instr) => instr,
             };
 
-            }
-
-
             if TRACE {
-                self.trace_print(pc);
+                self.trace_print2(pc);
                 disassemble_one(pc as u32, instr, true);
-            }
+                println!("");
             }
 
             // first 7 bits are the opcode
@@ -376,54 +374,33 @@ impl Emulator {
                 // BRANCH
                 0b1100011 => {
                     let typ = BType::parse(instr);
-                    match typ.funct3 {
+
+                    let take_branch = match typ.funct3 {
                         // BEQ
-                        0b000 => {
-                            if self.read_reg(typ.rs1) == self.read_reg(typ.rs2) {
-                                pc = pc.wrapping_add(typ.imm);
-                                continue;
-                            }
-                        },
+                        0b000 => self.read_reg(typ.rs1) == self.read_reg(typ.rs2),
+
                         // BNE
-                        0b001 => {
-                            if self.read_reg(typ.rs1) != self.read_reg(typ.rs2) {
-                                pc = pc.wrapping_add(typ.imm);
-                                continue;
-                            }
-                        },
+                        0b001 => self.read_reg(typ.rs1) != self.read_reg(typ.rs2),
+
                         // BLT
-                        0b100 => {
-                            if (self.read_reg(typ.rs1) as i32) < self.read_reg(typ.rs2) as i32 {
-                                pc = pc.wrapping_add(typ.imm);
-                                continue;
-                            }
-                        },
+                        0b100 => (self.read_reg(typ.rs1) as i32) < self.read_reg(typ.rs2) as i32,
+
                         // BGE
-                        0b101 => {
-                            if self.read_reg(typ.rs1) as i32 >= self.read_reg(typ.rs2) as i32 {
-                                pc = pc.wrapping_add(typ.imm);
-                                continue;
-                            }
-                        },
+                        0b101 => self.read_reg(typ.rs1) as i32 >= self.read_reg(typ.rs2) as i32,
+
                         // BLTU
-                        0b110 => {
-                            if self.read_reg(typ.rs1) < self.read_reg(typ.rs2) {
-                                pc = pc.wrapping_add(typ.imm);
-                                continue;
-                            }
-                        },
+                        0b110 => self.read_reg(typ.rs1) < self.read_reg(typ.rs2),
+
                         // BGEU
-                        0b111 => {
-                            if self.read_reg(typ.rs1) >= self.read_reg(typ.rs2) {
-                                pc = pc.wrapping_add(typ.imm);
-                                pc = pc + typ.imm;
-                                continue;
-                            }
-                        },
-                        _ => {
-                            exit!(EmulatorExit::InvalidInstruction(instr));
-                        },
+                        0b111 => self.read_reg(typ.rs1) >= self.read_reg(typ.rs2),
+
+                        _ => exit!(EmulatorExit::InvalidInstruction(instr)),
                     };
+
+                    if take_branch {
+                        pc = pc.wrapping_add(typ.imm);
+                        continue 'next_instruction;
+                    }
                 },
 
                 // LOAD
@@ -495,7 +472,7 @@ impl Emulator {
                     match typ.funct3 {
                         // ADDI
                         0b000 => {
-                            let data = self.read_reg(typ.rs1).wrapping_add(typ.imm);
+                            let data = self.read_reg(typ.rs1).wrapping_add_signed(typ.imm as i32);
                             self.write_reg(typ.rd, data);
                         },
                         // SLTI
