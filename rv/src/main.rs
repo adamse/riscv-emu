@@ -11,34 +11,52 @@ use crate::instructions::*;
 use elf::Elf;
 
 fn main() {
-    let elf = Elf::load("../test/test").unwrap();
+    let elf = Elf::load("../test/test2").unwrap();
 
     let mut emu = Emulator::new(25*1024*1024);
     emu.load(&elf).unwrap();
 
     // allocate an initial stack
 
+    // TODO: alignment??
     let stack_size = 1 * 1024 * 1096;
     let (stack_start, stack_end) = emu.mem.allocate(stack_size, PERM_RAW | PERM_WRITE).unwrap();
 
-    emu.write_reg(RegName::Sp.as_reg(), stack_start as u32);
+    println!("allocated stack: {:08x}-{:08x}", stack_start, stack_end);
+    let mut sp = stack_end;
+
     // stack layout:
+    // progname\0
     // aux vector, null terminated
     // env vector, null terminated
     // arg vector, null terminated
     // argc
-    let init = &[
-        0, 0, 0, 0, // aux vector
-        0, 0, 0, 0, // env vector
-        0, 0, 0, 0, // arg vector
-        0, 0, 0, 0, // argc
-    ];
-    // TODO: progname in argv[0]
-    // TODO: alignment??
-    emu.mem.write(stack_start, PERM_WRITE, init).unwrap();
 
-    println!("allocated stack: {:08x}-{:08x}", stack_start, stack_end);
+    macro_rules! push {
+        ($val:expr) => {{
+            // allocate space
+            sp -= $val.len() as u32;
+            // write data
+            emu.mem.write(sp, PERM_WRITE, &$val[..]).unwrap();
+            println!("{sp:08x}: {:02x?}", $val);
+            sp
+        }}
+    }
 
+    let progname = b"test\0";
+    let progname = push!(progname);
+
+    // aux vector terminator
+    push!(u32::to_le_bytes(0));
+    push!(u32::to_le_bytes(0));
+    // env vector terminator
+    push!(u32::to_le_bytes(0));
+    // argv vector
+    push!(u32::to_le_bytes(0));
+    push!(u32::to_le_bytes(progname));
+    // argc
+    push!(u32::to_le_bytes(1));
+    emu.write_reg(RegName::Sp.as_reg(), sp);
 
     // allocate a heap
 

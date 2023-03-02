@@ -164,7 +164,7 @@ impl Memory {
 
         self.check_bounds(range.clone())?;
 
-        if perm != 0 {
+        if perm != PERM_NONE {
             self.check_permission(range.clone(), perm)?;
         }
 
@@ -246,6 +246,7 @@ impl Emulator {
     }
 
     pub fn write_reg(&mut self, reg: Reg, val: u32) {
+        // don't write the zero reg
         if reg.0 != 0 {
             self.regs[reg.0 as usize - 1] = val;
         }
