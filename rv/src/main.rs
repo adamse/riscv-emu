@@ -104,6 +104,8 @@ fn main() {
                         let fd = emu.read_reg(Reg(10));
                         let buf = emu.read_reg(Reg(11));
                         println!("fstat({fd}, {buf:08x})");
+                        // size of kernel stat struct is 128 bytes
+                        emu.mem.write(buf, PERM_WRITE, &[0; 128]).unwrap();
                         // just return ok
                         emu.write_reg(Reg(10), 0);
                     },
