@@ -8,6 +8,9 @@ use rangeset::RangeSet;
 use crate::instructions::*;
 use crate::disassemble::*;
 
+#[cfg(feature = "trace")]
+const TRACE: bool = true;
+#[cfg(not(feature = "trace"))]
 const TRACE: bool = false;
 
 pub const PERM_NONE: u8 = 0b0;
