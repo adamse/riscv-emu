@@ -21,10 +21,12 @@ struct  kernel_stat
   int __glibc_reserved[2];
 };
 
-void
+int
 main(int argc, char** argv) {
     printf("struct kernel_stat size: %d\n", sizeof(struct kernel_stat));
     printf("struct stat size: %d\n", sizeof(struct stat));
     printf("hello world!: %d\n", argc);
     printf("hello world!: %d %s\n", argc, argv[0]);
+
+    return 0;
 }

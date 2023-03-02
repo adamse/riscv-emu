@@ -77,8 +77,16 @@ fn main() {
                 // sycall no is in a7/x17
                 let syscall_no = emu.read_reg(Reg(17));
                 println!("syscall: {syscall_no}");
-                match syscall_no {
-                    // read long sys_write(unsigned int fd, const char __user *buf, size_t count);
+                let ret = match syscall_no {
+                    // long sys_close(unsigned int fd);
+                    57 => {
+                        let fd = emu.read_reg(Reg(10));
+                        println!("close({fd})");
+
+                        // return ok
+                        0
+                    },
+                    // long sys_write(unsigned int fd, const char __user *buf, size_t count);
                     64 => {
                         let fd = emu.read_reg(Reg(10));
                         let buf = emu.read_reg(Reg(11));
@@ -86,7 +94,7 @@ fn main() {
 
                         println!("write({fd}, {buf:08x}, {count})");
 
-                        let ret = if fd == 1 || fd == 2 {
+                        if fd == 1 || fd == 2 {
                             // stdout or stderr
                             let bytes = emu.mem.read(buf..buf+count, PERM_READ).unwrap();
                             let string = String::from_utf8_lossy(bytes);
@@ -95,9 +103,7 @@ fn main() {
                             0
                         } else {
                             !1 // TODO: right return for write ??
-                        };
-
-                        emu.write_reg(Reg(10), ret);
+                        }
                     }
                     // fstat / newfstat(unsigned int fd, struct stat __user *statbuf)
                     80 => {
@@ -106,8 +112,16 @@ fn main() {
                         println!("fstat({fd}, {buf:08x})");
                         // size of kernel stat struct is 128 bytes
                         emu.mem.write(buf, PERM_WRITE, &[0; 128]).unwrap();
+
                         // just return ok
-                        emu.write_reg(Reg(10), 0);
+                        0
+                    },
+                    // long sys_exit(int error_code);
+                    93 => {
+                        let code = emu.read_reg(Reg(10)) as i32;
+                        println!("exit({code})");
+
+                        return;
                     },
                     // brk / long sys_brk(unsigned long brk)
                     214 => {
@@ -122,10 +136,9 @@ fn main() {
                             // todo do something about oom?
                         } else {
                             current_brk = new_brk;
-                        };
+                        }
 
-                        emu.write_reg(Reg(10), current_brk);
-
+                        current_brk
                     },
                     x => {
                         let arg0 = emu.read_reg(Reg(10));
@@ -136,7 +149,11 @@ fn main() {
                         let arg5 = emu.read_reg(Reg(15));
                         panic!("Unhandled syscall no: {x} {arg0:08x} {arg1:08x} {arg2:08x} {arg3:08x} {arg4:08x} {arg5:08x}");
                     }
-                }
+                };
+
+                println!("ret = {ret}");
+                // set return value
+                emu.write_reg(Reg(10), ret);
 
                 // update pc to next instruction
                 emu.pc = emu.pc + 4;
